@@ -1,0 +1,60 @@
+{
+  "directions": [
+    "S",
+    "SE",
+    "E",
+    "NE",
+    "N",
+    "NW",
+    "W",
+    "SW"
+  ],
+  "cols": 8,
+  "rows": 1,
+  "slime": {
+    "cell": [
+      202,
+      250
+    ],
+    "cols": 8,
+    "rows": 1,
+    "sheet": [
+      1616,
+      250
+    ],
+    "footPad": 12,
+    "directions": [
+      "S",
+      "SE",
+      "E",
+      "NE",
+      "N",
+      "NW",
+      "W",
+      "SW"
+    ]
+  },
+  "bat": {
+    "cell": [
+      252,
+      302
+    ],
+    "cols": 8,
+    "rows": 1,
+    "sheet": [
+      2016,
+      302
+    ],
+    "footPad": 12,
+    "directions": [
+      "S",
+      "SE",
+      "E",
+      "NE",
+      "N",
+      "NW",
+      "W",
+      "SW"
+    ]
+  }
+}

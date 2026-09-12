@@ -1,0 +1,3 @@
+Kenney.nl Scribble Platformer, Scribble Dungeons, Tiny Dungeon — CC0 1.0. https://kenney.nl
+Characters, items: original chibi sprites generated for this prototype (not Kenney).
+Dungeon floor, walls, decorations (crystal/mushroom/lantern/vine/flower/stairs): original art for this prototype.
