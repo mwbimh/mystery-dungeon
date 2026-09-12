@@ -59,6 +59,8 @@
   let hemi = null;
   let dirtTex = null;
   let rockTex = null;
+  let currentTheme = null;
+  let pendingTheme = null;
 
   const actorPool = [];
   const itemPool = [];
@@ -129,7 +131,57 @@
     }
   }
 
-  function tryLoadRuntimeCaveTex(name, onReady) {
+  function setTheme(theme) {
+    if (!theme) return;
+    if (!active || !scene) { pendingTheme = theme; return; }
+    if (currentTheme === theme) return;
+    currentTheme = theme;
+    if (scene.fog) scene.fog.color.set(theme.fog);
+    if (scene.background && scene.background.set) scene.background.set(theme.fog);
+    if (renderer) renderer.setClearColor(theme.fog, 1);
+    if (hemi) {
+      hemi.color.set(theme.hemiSky);
+      hemi.groundColor.set(theme.hemiGround);
+    }
+    // vertex tint palette (updateVisibility refreshes colours when sig changes)
+    if (theme.tints) {
+      COL.floorRoomVis.set(theme.tints.floorRoomVis);
+      COL.floorCorrVis.set(theme.tints.floorCorrVis);
+      COL.floorRoomMem.set(theme.tints.floorRoomMem);
+      COL.floorCorrMem.set(theme.tints.floorCorrMem);
+      COL.wallVis.set(theme.tints.wallVis);
+      COL.wallMem.set(theme.tints.wallMem);
+    }
+    lastVisSig = "";
+    tryLoadRuntimeCaveTex(theme.floorTex, function (tex) {
+      dirtTex = tex;
+      if (floorMesh && floorMesh.material) {
+        floorMesh.material.map = tex;
+        floorMesh.material.needsUpdate = true;
+      }
+    }, function () {
+      dirtTex = makeSeamlessTex(256, 3, theme.palFloor);
+      if (floorMesh && floorMesh.material) {
+        floorMesh.material.map = dirtTex;
+        floorMesh.material.needsUpdate = true;
+      }
+    });
+    tryLoadRuntimeCaveTex(theme.wallTex, function (tex) {
+      rockTex = tex;
+      if (wallMesh && wallMesh.material) {
+        wallMesh.material.map = tex;
+        wallMesh.material.needsUpdate = true;
+      }
+    }, function () {
+      rockTex = makeSeamlessTex(256, 19, theme.palWall);
+      if (wallMesh && wallMesh.material) {
+        wallMesh.material.map = rockTex;
+        wallMesh.material.needsUpdate = true;
+      }
+    });
+  }
+
+  function tryLoadRuntimeCaveTex(name, onReady, onError) {
     // Prefer sprites.texture (handles PNG + painter fallback); clone settings for tiling
     if (MD.sprites && typeof MD.sprites.texture === "function") {
       const base = MD.sprites.texture(name);
@@ -164,7 +216,7 @@
         if (onReady) onReady(tex);
       },
       undefined,
-      function () { /* keep procedural fallback */ }
+      function () { if (onError) onError(); }
     );
   }
 
@@ -902,17 +954,19 @@
         const room = isRoom(map, x, y);
         const rid = map.roomIds[y][x];
         const n = hash01(x * 17, y * 31);
+        const pool = (currentTheme && currentTheme.deco) || ["crystal", "mushroom", "lantern", "vine", "flower"];
+        const pick = (f) => pool[Math.min(pool.length - 1, Math.floor(f * pool.length))];
         let name = null;
         if (room) {
           if (mh[rid] && n > 0.42) {
-            name = n > 0.72 ? "crystal" : (n > 0.56 ? "lantern" : "mushroom");
+            name = n > 0.72 ? pick((n * 7) % 1) : (n > 0.56 ? pick((n * 13) % 1) : pick((n * 5) % 1));
           } else if (walls >= 2 && n > 0.36) {
-            name = n > 0.7 ? "lantern" : (n > 0.52 ? "vine" : "flower");
+            name = n > 0.7 ? pick((n * 11) % 1) : (n > 0.52 ? pick((n * 17) % 1) : pick((n * 3) % 1));
           } else if (n > 0.64) {
-            name = n > 0.86 ? "crystal" : (n > 0.76 ? "mushroom" : (n > 0.7 ? "vine" : "flower"));
+            name = pick((n * 23) % 1);
           }
         } else if (n > 0.84) {
-          name = n > 0.93 ? "vine" : "flower";
+          name = pick((n * 29) % 1);
         }
         if (!name) continue;
         // skip 1-tile corridors (two opposite walls) — sprites clip both sides
@@ -1407,6 +1461,11 @@
 
     active = true;
     MD.view3d.active = true;
+    if (pendingTheme) {
+      const t = pendingTheme;
+      pendingTheme = null;
+      setTheme(t);
+    }
     return true;
   }
 
@@ -1512,6 +1571,7 @@
     pickTile: pickTile,
     screenToTileDir: screenToTileDir,
     getYaw: getYaw,
+    setTheme: setTheme,
     active: false,
   };
 })(typeof window !== "undefined" ? window : globalThis);

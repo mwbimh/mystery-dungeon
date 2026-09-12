@@ -3,9 +3,9 @@
   const MD = window.MD;
   const MAX_BAG = 20;
   const MAX_MONSTERS = 16;
-  const TOTAL_FLOORS = 8;
+  const TOTAL_FLOORS = 24;
   const DEBUG = /(?:\?|&)debug=1(?:&|$)/.test(location.search);
-  const ASSET_V = "50";
+  const ASSET_V = "59";
   const ITEM_ICON = {
     onigiri: "assets/runtime/onigiri.png",
     bigOnigiri: "assets/runtime/bigOnigiri.png",
@@ -309,6 +309,8 @@
   function setupFloor(floorNum) {
     state.floor = floorNum;
     state.turn = floorNum === 1 ? 0 : state.turn;
+    state.theme = MD.themeForFloor(floorNum);
+    if (MD.view3d && MD.view3d.setTheme) MD.view3d.setTheme(state.theme);
     state.map = MD.generateFloor(floorNum);
     state.enemies = [];
     state.items = [];
@@ -338,18 +340,18 @@
       if (r.isMonsterHouse) {
         // Pre-place some, rest on trigger
         const area = r.w * r.h;
-        const pre = Math.min(3, Math.floor(area / 10));
+        const pre = Math.min(2, Math.floor(area / 12));
         placeEnemies(pre, r.id, true);
         // Extra items in MH
         placeItems(MD.randInt(4, 7), (rid) => rid === r.id);
       } else {
-        const n = Math.random() < 0.7 ? MD.randInt(1, 2) : 0;
+        const n = Math.random() < 0.45 ? 1 : 0;
         if (n) placeEnemies(n, r.id, false);
       }
     }
     // Sparse corridor / leftover monsters if under soft count
     const alive = () => state.enemies.filter((e) => e.alive).length;
-    while (alive() < Math.min(8, 4 + floorNum) && alive() < MAX_MONSTERS) {
+    while (alive() < Math.min(5, 2 + Math.floor(floorNum / 3)) && alive() < MAX_MONSTERS) {
       placeEnemies(1, null, false);
       if (emptyFloorTiles().length < 5) break;
     }
@@ -576,7 +578,7 @@
   }
 
   function spawnWanderer() {
-    if (state.spawnCounter < 40) return;
+    if (state.spawnCounter < 55) return;
     state.spawnCounter = 0;
     const alive = state.enemies.filter((e) => e.alive).length;
     if (alive >= MAX_MONSTERS) return;
@@ -1942,4 +1944,12 @@
 
   // Expose for debug
   window.MD_STATE = state;
+  if (DEBUG) {
+    MD.debugFloor = function (n) {
+      if (state.mode !== "dungeon") return false;
+      setupFloor(Math.min(Math.max(1, n | 0), TOTAL_FLOORS));
+      updateUI();
+      return true;
+    };
+  }
 })();

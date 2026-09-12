@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>迷宫</title>
-  <link rel="stylesheet" href="css/style.css?v=50" />
+  <link rel="stylesheet" href="css/style.css?v=59" />
 </head>
 <body>
   <div class="app">
@@ -89,47 +89,47 @@
   <!-- Town map (pre-dungeon hub) -->
   <div class="overlay town-overlay" id="townOverlay">
     <div class="town-map" id="townMap">
-      <img class="town-map-bg" src="assets/runtime/ui/town/town-map.png?v=50" alt="镇子地图" draggable="false">
+      <img class="town-map-bg" src="assets/runtime/ui/town/town-map.png?v=59" alt="镇子地图" draggable="false">
       <button type="button" class="town-sticker" id="stickerEntrance" data-action="enter" title="迷宫入口"
         style="left:50%;top:7%;width:12%;">
-        <img class="idle" src="assets/runtime/ui/town/entrance-idle.png?v=50" alt="入口" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/entrance-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/entrance-idle.png?v=59" alt="入口" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/entrance-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">迷宫入口</span>
       </button>
       <button type="button" class="town-sticker" id="stickerChatgpt" data-action="npc" data-npc="ChatGPT" title="ChatGPT"
         style="left:18%;top:28%;width:10%;">
-        <img class="idle" src="assets/runtime/ui/town/chatgpt-idle.png?v=50" alt="ChatGPT" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/chatgpt-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/chatgpt-idle.png?v=59" alt="ChatGPT" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/chatgpt-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">GPT</span>
       </button>
       <button type="button" class="town-sticker" id="stickerClaude" data-action="npc" data-npc="Claude" title="Claude"
         style="left:72%;top:26%;width:10%;">
-        <img class="idle" src="assets/runtime/ui/town/claude-idle.png?v=50" alt="Claude" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/claude-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/claude-idle.png?v=59" alt="Claude" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/claude-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">Claude</span>
       </button>
       <button type="button" class="town-sticker" id="stickerKimi" data-action="npc" data-npc="Kimi" title="Kimi"
         style="left:22%;top:58%;width:10%;">
-        <img class="idle" src="assets/runtime/ui/town/kimi-idle.png?v=50" alt="Kimi" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/kimi-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/kimi-idle.png?v=59" alt="Kimi" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/kimi-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">Kimi</span>
       </button>
       <button type="button" class="town-sticker" id="stickerGlm" data-action="npc" data-npc="GLM" title="GLM / Z.ai"
         style="left:70%;top:56%;width:10%;">
-        <img class="idle" src="assets/runtime/ui/town/glm-idle.png?v=50" alt="GLM" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/glm-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/glm-idle.png?v=59" alt="GLM" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/glm-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">GLM</span>
       </button>
       <button type="button" class="town-sticker" id="stickerHarness" data-action="npc" data-npc="DeepSeek Harness" title="DeepSeek Harness"
         style="left:48%;top:40%;width:11%;">
-        <img class="idle" src="assets/runtime/ui/town/harness-idle.png?v=50" alt="Harness" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/harness-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/harness-idle.png?v=59" alt="Harness" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/harness-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">Harness</span>
       </button>
       <button type="button" class="town-sticker town-sticker-self" id="stickerDeepseek" data-action="warehouse" title="DeepSeek · 仓库"
         style="left:50%;bottom:2%;top:auto;width:14%;">
-        <img class="idle" src="assets/runtime/ui/town/deepseek-idle.png?v=50" alt="DeepSeek" draggable="false">
-        <img class="hov" src="assets/runtime/ui/town/deepseek-hover.png?v=50" alt="" draggable="false">
+        <img class="idle" src="assets/runtime/ui/town/deepseek-idle.png?v=59" alt="DeepSeek" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/deepseek-hover.png?v=59" alt="" draggable="false">
         <span class="town-label">DeepSeek · 仓库</span>
       </button>
       <div class="town-msg-chip" id="townMsg">欢迎来到镇子。点上面入口进迷宫，点自己开仓库。</div>
@@ -177,8 +177,8 @@
   <script>
   (function () {
     var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
-    var v = "50";
-    var files = ["js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
+    var v = "60";
+    var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
     if (!flat) {
       files.unshift("vendor/three.min.js");
       files.push("js/sprites.js?v=" + v, "js/view3d.js?v=" + v);

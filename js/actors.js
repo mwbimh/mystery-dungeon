@@ -33,13 +33,15 @@
 
   function makeEnemy(type, x, y) {
     const d = ENEMY_DEFS[type];
+    const hp = Math.max(1, Math.round(d.hp * 0.85));
+    const atk = Math.max(1, Math.round(d.atk * 0.85));
     return {
       kind: "enemy",
       type,
       name: d.name,
       x, y,
-      hp: d.hp, maxHp: d.hp,
-      atk: d.atk, def: d.def,
+      hp: hp, maxHp: hp,
+      atk: atk, def: d.def,
       color: d.color,
       glyph: d.glyph,
       statuses: [],
@@ -52,8 +54,8 @@
   function pickEnemyType(floorNum) {
     if (floorNum >= 4) {
       const r = Math.random();
-      if (r < 0.35) return "slime";
-      if (r < 0.65) return "bat";
+      if (r < 0.55) return "slime";
+      if (r < 0.85) return "bat";
       return "shell";
     }
     if (floorNum >= 2) {

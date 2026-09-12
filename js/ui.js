@@ -226,7 +226,7 @@
       pills.innerHTML = "";
     } else if (state.player) {
       const p = state.player;
-      floorEl.textContent = state.floor + " F";
+      floorEl.textContent = (state.theme ? state.theme.name + " " : "") + state.floor + "F";
       hpEl.textContent = p.hp + "/" + p.maxHp;
       bellyEl.textContent = p.belly + "/" + p.maxBelly;
       turnEl.textContent = String(state.turn);
