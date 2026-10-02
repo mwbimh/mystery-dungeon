@@ -416,6 +416,9 @@ test('two live tabs cannot silently overwrite each other and stale progress rema
     assert.match(await second.locator('#saveStatus').textContent(), /保存失败/);
     assert.deepEqual(await first.evaluate(async () => ({ ...(await MDMenu.store.read(1)).snapshot, playTimeMs: 0 })), latest);
     await second.locator('#btnSessionMenu').click();
+    // Opening the shell awaits the queued save and IndexedDB slot listing.
+    // click() dispatching is not evidence that this asynchronous render finished.
+    await second.getByRole('button', { name: '下载当前进度', exact: true }).waitFor({ state: 'visible' });
     assert.equal(await second.getByRole('button', { name: '下载当前进度', exact: true }).isVisible(), true);
   } finally { await context.close(); }
 });
