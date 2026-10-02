@@ -25,8 +25,8 @@ def main():
         "repository": os.environ.get("REPOSITORY", "mwbimh/mystery-dungeon"),
         "workflowRunUrl": os.environ.get("WORKFLOW_RUN_URL", ""),
         "gameConfigSha256": sha256(destination / "config/game.json"),
-        "gameWorkbookSha256": sha256(ROOT / "config/game.xlsx"),
-        "textsWorkbookSha256": sha256(ROOT / "config/texts.xlsx"),
+        "workbooksSha256": {name: sha256(ROOT / "config" / name)
+                            for name in ("rules.xlsx", "monsters.xlsx", "items.xlsx", "dungeons.xlsx", "spawns.xlsx", "texts.xlsx")},
     }
     (destination / "build-info.json").write_text(
         json.dumps(info, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

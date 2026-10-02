@@ -104,7 +104,7 @@ def prepare(root, site, expected, expected_previous):
         "project_id": PROJECT_ID,
         "generated_config_sha256": sha256(generated),
         "workbooks_sha256": {name: sha256(root / "config" / name)
-                             for name in ("game.xlsx", "texts.xlsx")},
+                             for name in ("rules.xlsx", "monsters.xlsx", "items.xlsx", "dungeons.xlsx", "spawns.xlsx", "texts.xlsx")},
         "prepared_at": datetime.now(timezone.utc).isoformat(),
         "checks": ["npm run check", "npm run build"],
         "human_acceptance": "not_recorded_by_this_tool",
@@ -120,8 +120,7 @@ def prepare(root, site, expected, expected_previous):
             "sourceCommit": expected, "sourceBranch": BRANCH,
             "repository": "mwbimh/mystery-dungeon", "workflowRunUrl": None,
             "gameConfigSha256": provenance["generated_config_sha256"],
-            "gameWorkbookSha256": provenance["workbooks_sha256"]["game.xlsx"],
-            "textsWorkbookSha256": provenance["workbooks_sha256"]["texts.xlsx"],
+            "workbooksSha256": provenance["workbooks_sha256"],
             "builder": "local-pinned-luban-and-native-sites",
         }, indent=2) + "\n")
         shutil.copy2(root / "LICENSE", staging / "LICENSE")

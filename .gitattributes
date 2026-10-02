@@ -53,8 +53,14 @@
 
 # These small source workbooks are ordinary Git blobs, not LFS pointers.
 # Other Excel files and all existing media retain the LFS rules above.
-config/game.xlsx -filter -diff -merge -text
+config/rules.xlsx -filter -diff -merge -text
+config/monsters.xlsx -filter -diff -merge -text
+config/items.xlsx -filter -diff -merge -text
+config/dungeons.xlsx -filter -diff -merge -text
+config/spawns.xlsx -filter -diff -merge -text
 config/texts.xlsx -filter -diff -merge -text
+# Isolated browser-test fixture: only player.hp differs from rules.xlsx.
+tests/fixtures/player-hp47-rules.xlsx -filter -diff -merge -text
 
 # Archives / packages
 *.zip filter=lfs diff=lfs merge=lfs -text

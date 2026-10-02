@@ -28,13 +28,18 @@
     };
   }
 
-  function makeEnemy(type, x, y) {
+  function makeEnemy(type, x, y, floorNum = (MD.state && MD.state.floor) || 1) {
+    if (!Object.prototype.hasOwnProperty.call(ENEMY_DEFS, type)) throw new Error("Unknown enemy ID: " + type);
     const d = ENEMY_DEFS[type];
-    const hp = Math.max(1, Math.round(d.hp * MD.config.rules.enemyScale));
-    const atk = Math.max(1, Math.round(d.atk * MD.config.rules.enemyScale));
+    const behaviorTemplate = d.behaviorTemplate;
+    if (behaviorTemplate !== "chase") throw new Error("Unsupported enemy behavior template: " + behaviorTemplate);
+    const rules = MD.floorConfig(floorNum).rules;
+    const hp = Math.max(1, Math.round(d.hp * rules.enemyScale));
+    const atk = Math.max(1, Math.round(d.atk * rules.enemyScale));
     return {
       kind: "enemy",
       type,
+      behaviorTemplate,
       name: MD.t(d.nameKey),
       x, y,
       hp: hp, maxHp: hp,
@@ -49,8 +54,7 @@
   }
 
   function pickEnemyType(floorNum) {
-    const group = MD.config.enemySpawns.filter(row => row.fromFloor <= floorNum).at(-1);
-    return MD.weightedPick(group.entries);
+    return MD.weightedPick(MD.floorConfig(floorNum).enemyEntries);
   }
 
   function meleeDamage(atk, def) {

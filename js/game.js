@@ -1,18 +1,20 @@
 /* 迷宫 — main game */
 (function () {
   const MD = window.MD;
-  const MAX_BAG = 20;
-  const MAX_MONSTERS = MD.config.rules.maxMonsters;
-  const TOTAL_FLOORS = MD.config.rules.totalFloors;
+  const MAX_BAG = MD.config.rules.maxBag;
   const DEBUG = /(?:\?|&)debug=1(?:&|$)/.test(location.search);
   const ASSET_V = "59";
-  const ITEM_ICON = {
-    onigiri: "assets/runtime/onigiri.png",
-    bigOnigiri: "assets/runtime/bigOnigiri.png",
-    rock: "assets/runtime/rock.png",
-    sleepHerb: "assets/runtime/herb.png",
-    knockStaff: "assets/runtime/staff.png",
-  };
+  const ITEM_ICON_ALIASES = { sleepHerb: "herb", knockStaff: "staff" };
+
+  function floorRules() {
+    return state.floorConfig ? state.floorConfig.rules : MD.floorConfig(1).rules;
+  }
+  function selectedDungeon() {
+    return MD.config.dungeons[MD.dungeonId];
+  }
+  function totalFloors() {
+    return (state.floorConfig ? state.floorConfig.dungeon : selectedDungeon()).totalFloors;
+  }
 
   function emptyBag() {
     return Array(MAX_BAG).fill(null);
@@ -60,6 +62,8 @@
   const state = {
     mode: "town", // town | dungeon
     debug: DEBUG,
+    dungeonId: MD.dungeonId,
+    floorConfig: null,
     floor: 0,
     turn: 0,
     map: null,
@@ -67,7 +71,7 @@
     enemies: [],
     items: [], // {x,y,type,...item fields}
     bag: emptyBag(),
-    skills: { active: [null, null], passive: [null] },
+    skills: { active: [], passive: [] },
     warehouse: MD.loadWarehouse(),
     explored: new Set(),
     visible: new Set(),
@@ -109,13 +113,13 @@
   function bagClear(index) {
     if (index >= 0 && index < MAX_BAG) state.bag[index] = null;
   }
-  const SKILL_SLOT_MAX = { active: 4, passive: 3 };
-  const SKILL_SLOT_START = { active: 2, passive: 1 };
+  const SKILL_SLOT_MAX = { active: MD.config.rules.maxActiveSlots, passive: MD.config.rules.maxPassiveSlots };
+  const SKILL_SLOT_START = { active: MD.config.rules.activeSlots, passive: MD.config.rules.passiveSlots };
   function loadSkillMeta() {
     try {
       const o = JSON.parse(MD.storage.getItem("md-skill-meta") || "null");
       if (o && typeof o === "object") {
-        const a = Math.max(1, Math.min(SKILL_SLOT_MAX.active, o.active | 0));
+        const a = Math.max(0, Math.min(SKILL_SLOT_MAX.active, o.active | 0));
         const p = Math.max(0, Math.min(SKILL_SLOT_MAX.passive, o.passive | 0));
         return { active: a, passive: p };
       }
@@ -168,8 +172,11 @@
       maxPassive: SKILL_SLOT_MAX.passive,
     };
   };
-  const ACTIVE_SKILL_TYPES = { knockStaff: true, rock: true };
-  const PASSIVE_SKILL_TYPES = {};
+  function canEquipItem(item, kind) {
+    const definition = item && MD.ITEM_DEFS[item.type];
+    return !!definition && ((kind === "active" && definition.activeSkill === 1)
+      || (kind === "passive" && definition.passiveSkill === 1));
+  }
 
   function consumeFrom(src) {
     if (!src) return;
@@ -194,8 +201,8 @@
   }
   function itemIconSrc(item) {
     if (!item) return "";
-    const src = ITEM_ICON[item.type];
-    return src ? src + "?v=" + ASSET_V : "";
+    const id = ITEM_ICON_ALIASES[item.type] || item.type;
+    return "assets/runtime/" + encodeURIComponent(id) + ".png?v=" + ASSET_V;
   }
 
   function log(text, cls) {
@@ -298,16 +305,18 @@
       tiles = tiles.filter((t) => state.map.roomIds[t.y][t.x] === roomId);
     }
     MD.shuffle(tiles);
-    const n = Math.min(count, tiles.length, MAX_MONSTERS - state.enemies.filter((e) => e.alive).length);
+    const n = Math.min(count, tiles.length, floorRules().maxMonsters - state.enemies.filter((e) => e.alive).length);
     for (let i = 0; i < n; i++) {
       const t = tiles[i];
       const type = MD.pickEnemyType(state.floor);
-      state.enemies.push(MD.makeEnemy(type, t.x, t.y));
+      state.enemies.push(MD.makeEnemy(type, t.x, t.y, state.floor));
     }
   }
 
   function setupFloor(floorNum) {
     state.floor = floorNum;
+    state.floorConfig = MD.floorConfig(floorNum);
+    state.dungeonId = MD.dungeonId;
     state.turn = floorNum === 1 ? 0 : state.turn;
     state.theme = MD.themeForFloor(floorNum);
     if (MD.view3d && MD.view3d.setTheme) MD.view3d.setTheme(state.theme);
@@ -340,24 +349,25 @@
       if (r.isMonsterHouse) {
         // Pre-place some, rest on trigger
         const area = r.w * r.h;
-        const pre = Math.min(2, Math.floor(area / 12));
+        const pre = Math.min(floorRules().housePreEnemyMax, Math.floor(area / floorRules().housePreEnemyAreaDivisor));
         placeEnemies(pre, r.id, true);
         // Extra items in MH
-        placeItems(MD.randInt(MD.config.rules.houseItems.min, MD.config.rules.houseItems.max), (rid) => rid === r.id);
+        placeItems(MD.randInt(floorRules().houseItems.min, floorRules().houseItems.max), (rid) => rid === r.id);
       } else {
-        const n = MD.random() < MD.config.rules.roomEnemyChance ? 1 : 0;
+        const n = MD.random() < floorRules().roomEnemyChance ? 1 : 0;
         if (n) placeEnemies(n, r.id, false);
       }
     }
     // Sparse corridor / leftover monsters if under soft count
     const alive = () => state.enemies.filter((e) => e.alive).length;
-    while (alive() < Math.min(5, 2 + Math.floor(floorNum / 3)) && alive() < MAX_MONSTERS) {
+    while (alive() < Math.min(floorRules().floorEnemySoftMax, floorRules().floorEnemyBase + Math.floor(floorNum / floorRules().floorEnemyEvery)) && alive() < floorRules().maxMonsters) {
+      const before = alive();
       placeEnemies(1, null, false);
-      if (emptyFloorTiles().length < 5) break;
+      if (alive() === before || emptyFloorTiles().length < floorRules().floorEnemyEmptyReserve) break;
     }
 
     // Normal floor items
-    placeItems(MD.randInt(MD.config.rules.floorItems.min, MD.config.rules.floorItems.max), (rid) => rid !== state.map.spawnRoomId);
+    placeItems(MD.randInt(floorRules().floorItems.min, floorRules().floorItems.max), (rid) => rid !== state.map.spawnRoomId);
 
     // Ensure spawn tile clear of enemies/items
     state.enemies = state.enemies.filter((e) => !(e.x === spawn.x && e.y === spawn.y));
@@ -371,16 +381,41 @@
     log("到达了 " + floorNum + " 层。", "good");
   }
 
-  function enterDungeon() {
+  function resetRunInput() {
     if (state._animTimer) { clearTimeout(state._animTimer); state._animTimer = null; }
+    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+    chordParts = { x: 0, y: 0 };
+    state.runToken = (state.runToken || 0) + 1;
     state.animLock = false;
+    state.aiming = null;
+    state.pendingDash = null;
+    state.dashActive = false;
+    state.keysDown.clear();
+    state.keyBuffer = [];
+    state.invSelected = -1;
+    state.endKind = null;
+    cancelSkillAim();
+    const hint = document.getElementById("aimHint");
+    if (hint) hint.classList.add("hidden");
+  }
+
+  function enterDungeon() {
+    if (state.mode !== "town") return;
+    resetRunInput();
+    state.floorConfig = null;
+    state.turn = 0;
     state.mode = "dungeon";
     state.bag = padBag(state.bag);
     state.player = MD.makePlayer(0, 0);
     state.player.statuses = [];
     state.log = [];
-    state.lastBellyWarn = 100;
+    state.lastBellyWarn = state.player.belly;
     hideOverlay("townOverlay");
+    hideOverlay("endOverlay");
+    hideOverlay("helpOverlay");
+    state.invOpen = false;
+    const inv = hudInvEl();
+    if (inv) inv.classList.add("collapsed");
     closeWarehouse(true);
     setupFloor(1);
     canvas.focus();
@@ -388,8 +423,16 @@
   }
 
   function returnToTown(msg) {
-    if (state._animTimer) { clearTimeout(state._animTimer); state._animTimer = null; }
-    state.animLock = false;
+    resetRunInput();
+    state.floor = 0;
+    state.turn = 0;
+    state.floorConfig = null;
+    state.theme = null;
+    state.explored = new Set();
+    state.visible = new Set();
+    state.triggeredMH = new Set();
+    state.spawnCounter = 0;
+    state.justEnteredMH = false;
     state.mode = "town";
     state.map = null;
     state.enemies = [];
@@ -451,11 +494,11 @@
     state.triggeredMH.add(rid);
     const room = state.map.rooms.find((r) => r.id === rid);
     const area = room ? room.w * room.h : 20;
-    const want = Math.min(10, Math.max(5, Math.floor(area / 4)));
+    const want = Math.min(floorRules().houseEnemyMax, Math.max(floorRules().houseEnemyMin, Math.floor(area / floorRules().houseEnemyAreaDivisor)));
     const existing = state.enemies.filter((e) => e.alive && state.map.roomIds[e.y][e.x] === rid).length;
     const need = Math.max(0, want - existing);
     placeEnemies(need, rid, true);
-    placeItems(MD.randInt(1, 3), (id) => id === rid);
+    placeItems(MD.randInt(floorRules().houseTriggerItems.min, floorRules().houseTriggerItems.max), (id) => id === rid);
     state.justEnteredMH = true;
     log("怪物部屋！", "special");
   }
@@ -495,7 +538,7 @@
     if (state.map.tiles[p.y][p.x] === MD.TILE.STAIRS) {
       state.dashActive = false;
       state.pendingDash = null;
-      if (state.floor >= TOTAL_FLOORS) {
+      if (state.floor >= totalFloors()) {
         playPlayerAnimThen("climb", function () {
           state.endKind = "clear";
           log("走出了迷宫！", "good");
@@ -530,9 +573,10 @@
     // Continue dash?
     if (state.dashActive && state.pendingDash) {
       const { dx, dy } = state.pendingDash;
+      const runToken = state.runToken;
       // defer one frame so render can show intermediate
       requestAnimationFrame(() => {
-        if (state.mode !== "dungeon" || !state.dashActive) return;
+        if (state.mode !== "dungeon" || !state.dashActive || state.runToken !== runToken) return;
         continueDash(dx, dy);
       });
     }
@@ -544,15 +588,15 @@
     state.spawnCounter += 1;
 
     // Hunger interval comes from workbook.
-    if (state.turn % MD.config.rules.hungerEvery === 0) {
+    if (state.turn % floorRules().hungerEvery === 0) {
       if (p.belly > 0) p.belly -= 1;
     }
     if (p.belly <= 0) {
       p.belly = 0;
-      p.hp -= MD.config.rules.starvationDamage;
+      p.hp -= floorRules().starvationDamage;
       if (state.turn % 1 === 0) {
         // log occasionally
-        if (state.turn % 3 === 0) log("饿了。", "bad");
+        if (state.turn % floorRules().starvationLogEvery === 0) log("饿了。", "bad");
       }
       if (p.hp <= 0) {
         p.alive = false;
@@ -560,33 +604,33 @@
       }
     } else {
       // Configured regeneration interval, unless just entered a monster house.
-      if (!state.justEnteredMH && state.turn % MD.config.rules.regenEvery === 0 && p.hp < p.maxHp) {
-        p.hp += 1;
+      if (!state.justEnteredMH && state.turn % floorRules().regenEvery === 0 && p.hp < p.maxHp) {
+        p.hp = Math.min(p.maxHp, p.hp + floorRules().regenAmount);
       }
     }
     state.justEnteredMH = false;
 
-    if (p.belly <= 20 && state.lastBellyWarn > 20) {
+    if (p.belly <= floorRules().hungerWarning && state.lastBellyWarn > floorRules().hungerWarning) {
       log("肚子有点饿了……", "warn");
-      state.lastBellyWarn = 20;
+      state.lastBellyWarn = floorRules().hungerWarning;
     }
-    if (p.belly <= 10 && state.lastBellyWarn > 10) {
+    if (p.belly <= floorRules().hungerCritical && state.lastBellyWarn > floorRules().hungerCritical) {
       log("肚子饿了！", "bad");
-      state.lastBellyWarn = 10;
+      state.lastBellyWarn = floorRules().hungerCritical;
     }
-    if (p.belly > 20) state.lastBellyWarn = p.belly;
+    if (p.belly > floorRules().hungerWarning) state.lastBellyWarn = p.belly;
   }
 
   function spawnWanderer() {
-    if (state.spawnCounter < MD.config.rules.wandererEvery) return;
+    if (state.spawnCounter < floorRules().wandererEvery) return;
     state.spawnCounter = 0;
     const alive = state.enemies.filter((e) => e.alive).length;
-    if (alive >= MAX_MONSTERS) return;
+    if (alive >= floorRules().maxMonsters) return;
     const rid = MD.getRoomId(state.map, state.player.x, state.player.y);
     const tiles = emptyFloorTiles(rid >= 0 ? rid : null);
     if (!tiles.length) return;
     const t = tiles[MD.randInt(0, tiles.length - 1)];
-    state.enemies.push(MD.makeEnemy(MD.pickEnemyType(state.floor), t.x, t.y));
+    state.enemies.push(MD.makeEnemy(MD.pickEnemyType(state.floor), t.x, t.y, state.floor));
   }
 
   function onDeath() {
@@ -816,7 +860,7 @@
         }
       } else {
         // Configured idle movement chance.
-        if (MD.random() < MD.config.rules.idleMoveChance) {
+        if (MD.random() < floorRules().idleMoveChance) {
           const step = MD.randomDirStep(state.map, allActors(), e);
           if (step) {
             if (MD.setFacing) MD.setFacing(e, step.x - e.x, step.y - e.y);
@@ -831,26 +875,22 @@
 
   // --- Items ---
   function eatItem(index) {
+    if (skillsBlocked()) return;
     const item = state.bag[index];
-    if (!item) return;
-    if (item.type === "onigiri") {
-      applyFood(MD.config.effects.smallFood);
-      bagClear(index);
-      log("吃了" + MD.ITEM_DEFS.onigiri.name + "。", "good");
-    } else if (item.type === "bigOnigiri") {
-      applyFood(MD.config.effects.bigFood);
-      bagClear(index);
-      log("吃了" + MD.ITEM_DEFS.bigOnigiri.name + "。", "good");
-    } else if (item.type === "sleepHerb") {
-      bagClear(index);
-      MD.addStatus(state.player, "sleep", MD.randInt(MD.config.effects.sleepTurns.min, MD.config.effects.sleepTurns.max));
-      log("吃了" + MD.ITEM_DEFS.sleepHerb.name + "……睡着了。", "warn");
-    } else {
-      log("这个不能吃。");
-      return;
-    }
+    const effect = MD.itemEffect(item, "use");
+    if (!effect) return;
+    bagClear(index);
+    applyItemEffect(state.player, effect, state.player.facingDx, state.player.facingDy);
+    log(MD.t(effect.kind === "sleep" ? "item.usedSleep" : "item.used", { name: MD.ITEM_DEFS[item.type].name }), effect.kind === "sleep" ? "warn" : "good");
     closeInv();
     afterItemUseTurn();
+  }
+
+  function applyItemEffect(target, effect, dx, dy) {
+    if (effect.kind === "food" && target.kind === "player") applyFood(effect.power);
+    else if (effect.kind === "sleep") MD.addStatus(target, "sleep", MD.randInt(effect.turnsMin, effect.turnsMax));
+    else if (effect.kind === "damage") applyDamage(target, effect.power, "item");
+    else if (effect.kind === "knockback") knockback(target, dx, dy, effect);
   }
 
   function applyFood(amount) {
@@ -863,9 +903,6 @@
       p.belly = p.maxBelly;
     } else {
       p.belly = Math.min(p.maxBelly, p.belly + amount);
-      if (p.belly >= p.maxBelly && p.maxBelly < MD.config.effects.bellyCap && amount >= 100) {
-        // big fill while nearly full — optional raise handled when already full
-      }
     }
     state.lastBellyWarn = p.belly;
   }
@@ -891,6 +928,7 @@
   }
 
   function beginAim(action, slotIndex) {
+    if (skillsBlocked() || !MD.itemEffect(state.bag[slotIndex], action)) return;
     state.aiming = { action, slotIndex };
     state.invOpen = true;
     document.getElementById("aimHint").classList.remove("hidden");
@@ -941,73 +979,49 @@
   }
 
   function doThrow(item, src, dx, dy) {
-    const range = item.type === "knockStaff" ? MD.config.effects.staffThrowRange : MD.config.effects.throwRange;
-    const path = rayCast(state.player.x, state.player.y, dx, dy, range);
+    const effect = MD.itemEffect(item, "throw");
+    if (!effect || skillsBlocked()) return;
+    const path = rayCast(state.player.x, state.player.y, dx, dy, effect.range);
     consumeFrom(src);
-
     if (!path.length) {
       log("扔到了墙上。");
-      // item destroyed / lost for rock etc.
       afterItemUseTurn();
       return;
     }
     const last = path[path.length - 1];
     const hit = actorAt(last.x, last.y);
-
-    if (item.type === "rock") {
-      if (hit) {
-        log(MD.ITEM_DEFS.rock.name + "击中了" + hit.name + "！");
-        applyDamage(hit, MD.config.effects.rockDamage, "rock");
-      } else {
-        log(MD.ITEM_DEFS.rock.name + "落在了地上。");
-        // leave rock on floor
-        state.items.push({ ...MD.makeItem("rock"), x: last.x, y: last.y });
-      }
-    } else if (item.type === "sleepHerb") {
-      if (hit) {
-        MD.addStatus(hit, "sleep", MD.randInt(MD.config.effects.sleepTurns.min, MD.config.effects.sleepTurns.max));
-        log(MD.ITEM_DEFS.sleepHerb.name + "击中了" + hit.name + "！", "good");
-      } else {
-        state.items.push({ ...MD.makeItem("sleepHerb"), x: last.x, y: last.y });
-        log(MD.ITEM_DEFS.sleepHerb.name + "落在了地上。");
-      }
-    } else if (item.type === "onigiri" || item.type === "bigOnigiri") {
-      if (hit) {
-        log(MD.displayName(item) + "砸中了" + hit.name + "（" + MD.config.effects.foodDamage + "）。");
-        applyDamage(hit, MD.config.effects.foodDamage, "food");
-      } else {
-        state.items.push({ ...MD.makeItem(item.type), x: last.x, y: last.y });
-        log(MD.displayName(item) + "落在了地上。");
-      }
-    } else if (item.type === "knockStaff") {
-      // throw staff: knock once and destroy
-      if (hit) {
-        log("扔出的" + MD.ITEM_DEFS.knockStaff.name + "击中了" + hit.name + "！", "good");
-        knockback(hit, dx, dy);
-      } else {
-        log(MD.ITEM_DEFS.knockStaff.name + "摔碎了。");
-      }
+    const definition = MD.ITEM_DEFS[item.type];
+    if (hit) {
+      log(MD.t("item.hit", { name: definition.name, target: hit.name }), effect.kind === "damage" ? "" : "good");
+      applyItemEffect(hit, effect, dx, dy);
+    } else if (definition.dropOnMiss === 1) {
+      // A miss keeps the item's state, including remaining charges. Generate the
+      // legacy landing identity to keep default throw-miss RNG consumption.
+      const landed = MD.makeItem(item.type);
+      if (MD.itemHasCharges(item)) landed.charges = item.charges;
+      landed.name = MD.displayName(landed);
+      state.items.push({ ...landed, x: last.x, y: last.y });
+      log(MD.t("item.landed", { name: definition.name }));
+    } else {
+      log(MD.t("item.broken", { name: definition.name }));
     }
     afterItemUseTurn();
   }
 
   function doSwing(item, src, dx, dy) {
-    if (item.type !== "knockStaff") return;
+    const effect = MD.itemEffect(item, "swing");
+    if (!effect || skillsBlocked()) return;
     if ((item.charges | 0) <= 0) {
-      log("杖的次数已经用尽了。", "warn");
+      log(MD.t("item.emptyCharges", { name: MD.ITEM_DEFS[item.type].name }), "warn");
       afterItemUseTurn();
       return;
     }
     item.charges -= 1;
-    item.name = MD.ITEM_DEFS.knockStaff.name + " [" + item.charges + "]";
-    if (src && src.place === "skill" && item.charges <= 0) {
-      consumeFrom(src);
-    } else {
-      writeBackItem(src, item);
-    }
+    item.name = MD.displayName(item);
+    if (src && src.place === "skill" && item.charges <= 0) consumeFrom(src);
+    else writeBackItem(src, item);
 
-    // Configured bolt range.
-    const path = rayCast(state.player.x, state.player.y, dx, dy, MD.config.effects.staffRange);
+    const path = rayCast(state.player.x, state.player.y, dx, dy, effect.range);
     if (!path.length) {
       log("挥空了。");
       afterItemUseTurn();
@@ -1016,29 +1030,27 @@
     const last = path[path.length - 1];
     const hit = actorAt(last.x, last.y);
     if (hit) {
-      log(MD.ITEM_DEFS.knockStaff.name + "命中了" + hit.name + "！", "good");
-      knockback(hit, dx, dy);
+      log(MD.t("item.hit", { name: MD.ITEM_DEFS[item.type].name, target: hit.name }), "good");
+      applyItemEffect(hit, effect, dx, dy);
     } else {
       log("杖光消失在远处。");
     }
     afterItemUseTurn();
   }
 
-  function knockback(actor, dx, dy) {
-    // Knock until wall
-    let guard = 0;
-    while (guard++ < 100) {
+  function knockback(actor, dx, dy, effect) {
+    if (!dx && !dy) return;
+    // A ray cannot travel further than this map's dimensions. No fixed-size
+    // guard should truncate a valid larger designer map.
+    const limit = Math.max(state.map.width, state.map.height);
+    for (let step = 0; step < limit; step++) {
       if (!MD.canStep(state.map, actor.x, actor.y, dx, dy)) {
-        // Configured wall impact damage.
-        applyDamage(actor, MD.config.effects.wallDamage, "wall");
+        applyDamage(actor, effect.wallDamage, "wall");
         log(actor.name + "撞到了墙！", "warn");
         break;
       }
       const nx = actor.x + dx, ny = actor.y + dy;
-      if (actorAt(nx, ny)) {
-        // blocked by another actor — stop, no wall dmg
-        break;
-      }
+      if (actorAt(nx, ny)) break;
       actor.x = nx;
       actor.y = ny;
     }
@@ -1090,7 +1102,7 @@
       img.draggable = false;
       slot.appendChild(img);
     }
-    if (item.type === "knockStaff") {
+    if (MD.itemHasCharges(item)) {
       const badge = document.createElement("span");
       badge.className = "slot-charge";
       badge.textContent = String(item.charges | 0);
@@ -1179,8 +1191,13 @@
     if (sx === 0 && sy === 0) return;
     const [wx, wy] = toWorldDir(sx, sy);
     facePlayer(wx, wy);
-    if (item.type === "knockStaff") doSwing(item, src, wx, wy);
-    else if (item.type === "rock" || item.type === "sleepHerb") doThrow(item, src, wx, wy);
+    if (MD.itemEffect(item, "swing")) doSwing(item, src, wx, wy);
+    else if (MD.itemEffect(item, "throw")) doThrow(item, src, wx, wy);
+    else if (MD.itemEffect(item, "use")) {
+      applyItemEffect(state.player, MD.itemEffect(item, "use"), wx, wy);
+      consumeFrom(src);
+      afterItemUseTurn();
+    }
     updateUI();
   }
 
@@ -1215,10 +1232,9 @@
     const item = state.bag[bagIndex];
     if (!item) return;
     if (index < 0 || index >= skillMeta[kind]) return;
-    const ok = kind === "active" ? ACTIVE_SKILL_TYPES[item.type] : kind === "passive" ? PASSIVE_SKILL_TYPES[item.type] : false;
+    const ok = canEquipItem(item, kind);
     if (!ok) {
-      if (kind === "active") log("主动栏只能放" + MD.ITEM_DEFS.knockStaff.name + "或" + MD.ITEM_DEFS.rock.name + "。", "warn");
-      else log("被动技能还没开放。", "warn");
+      log(MD.t(kind === "active" ? "skill.ineligibleActive" : "skill.ineligiblePassive"), "warn");
       updateUI();
       return;
     }
@@ -1307,11 +1323,11 @@
     padSkills();
     const act = state.skills.active;
     for (let i = 0; i < act.length; i++) {
-      if (act[i] && !ACTIVE_SKILL_TYPES[act[i].type]) act[i] = null;
+      if (act[i] && !canEquipItem(act[i], "active")) act[i] = null;
     }
     const pas = state.skills.passive;
     for (let i = 0; i < pas.length; i++) {
-      if (pas[i] && !PASSIVE_SKILL_TYPES[pas[i].type]) pas[i] = null;
+      if (pas[i] && !canEquipItem(pas[i], "passive")) pas[i] = null;
     }
   }
 
@@ -1613,6 +1629,8 @@
   }
 
   function onKeyDown(e) {
+    // Native selector/navigation keys must not move the character or enter a run.
+    if (e.target && /^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
     const key = e.key;
 
     // Global overlays
@@ -1694,7 +1712,7 @@
       }
       if (key === "e" || key === "E") {
         const it = state.bag[state.invSelected];
-        if (it && MD.ITEM_DEFS[it.type].verbs.includes("eat")) {
+        if (it && MD.ITEM_DEFS[it.type]?.verbs.includes("eat")) {
           e.preventDefault();
           eatItem(state.invSelected);
         }
@@ -1702,7 +1720,7 @@
       }
       if (key === "t" || key === "T") {
         const it = state.bag[state.invSelected];
-        if (it && MD.ITEM_DEFS[it.type].verbs.includes("throw")) {
+        if (it && MD.ITEM_DEFS[it.type]?.verbs.includes("throw")) {
           e.preventDefault();
           beginAim("throw", state.invSelected);
         }
@@ -1710,7 +1728,7 @@
       }
       if (key === "z" || key === "Z" || key === "f" || key === "F") {
         const it = state.bag[state.invSelected];
-        if (it && MD.ITEM_DEFS[it.type].verbs.includes("swing")) {
+        if (it && MD.ITEM_DEFS[it.type]?.verbs.includes("swing")) {
           e.preventDefault();
           beginAim("swing", state.invSelected);
         }
@@ -1897,6 +1915,42 @@
 
   function updateUI() {
     MD.updateSidePanel(state);
+    const dungeon = state.floorConfig ? state.floorConfig.dungeon : selectedDungeon();
+    const name = MD.t(dungeon.nameKey);
+    const label = document.getElementById("statDungeon");
+    if (label) label.textContent = MD.t("dungeon.current", { name, floors: dungeon.totalFloors });
+    const select = document.getElementById("dungeonSelect");
+    if (select) {
+      select.value = MD.dungeonId;
+      select.disabled = state.mode !== "town";
+    }
+    const bar = document.getElementById("barBelly");
+    if (bar) bar.classList.toggle("low", !!state.player && state.player.belly <= floorRules().hungerWarning);
+  }
+
+  function initDungeonSelector() {
+    const select = document.getElementById("dungeonSelect");
+    if (!select) return;
+    for (const [id, dungeon] of Object.entries(MD.config.dungeons)) {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = MD.t("dungeon.current", { name: MD.t(dungeon.nameKey), floors: dungeon.totalFloors });
+      select.appendChild(option);
+    }
+    select.value = MD.dungeonId;
+    select.addEventListener("change", function () {
+      if (state.mode !== "town") { select.value = state.dungeonId; return; }
+      MD.selectDungeon(select.value);
+      state.dungeonId = MD.dungeonId;
+      if (DEBUG) mountDebugPanel();
+      updateUI();
+    });
+    document.getElementById("dungeonChooseLabel").textContent = MD.t("dungeon.choose");
+    document.getElementById("dungeonChoiceHint").textContent = MD.t("dungeon.choiceHint");
+    document.getElementById("btnNewRun").textContent = MD.t("dungeon.newRun");
+    document.getElementById("btnNewRun").onclick = enterDungeon;
+    document.getElementById("helpStairs").textContent = MD.t("dungeon.helpStairs");
+    document.getElementById("helpSkills").textContent = MD.t("skill.help");
   }
 
   function frame() {
@@ -1934,6 +1988,8 @@
   }
 
   // Boot
+  MD.canSelectDungeon = () => state.mode === "town";
+  initDungeonSelector();
   initSkillBar();
   renderSkills();
   log("欢迎。", "good");
@@ -1953,14 +2009,22 @@
   if (DEBUG) {
     MD.debugFloor = function (n) {
       if (state.mode !== "dungeon") return false;
-      setupFloor(Math.min(Math.max(1, n | 0), TOTAL_FLOORS));
+      setupFloor(Math.min(Math.max(1, n | 0), totalFloors()));
       updateUI();
       return true;
     };
 
-    // 主题预览面板：?debug=1 时出现在左下角，点按钮直接跳到对应主题首层
-    const panel = document.createElement("div");
-    panel.id = "debugPanel";
+    mountDebugPanel();
+  }
+
+  function mountDebugPanel() {
+    // Theme preview follows the currently selected dungeon.
+    let panel = document.getElementById("debugPanel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "debugPanel";
+    }
+    panel.innerHTML = "";
     const mkBtn = function (label, fn, cls) {
       const b = document.createElement("button");
       b.type = "button";
@@ -1969,9 +2033,14 @@
       b.addEventListener("click", fn);
       panel.appendChild(b);
     };
-    MD.config.themes.order.forEach(function (id, i) {
-      const t = MD.THEMES.find(theme => theme.id === id);
-      mkBtn(MD.t("theme." + id + ".name"), function () { MD.debugFloor(i * MD.FLOORS_PER_THEME + 1); });
+    const themeFloors = new Map();
+    for (let floor = 1; floor <= totalFloors(); floor++) {
+      const id = MD.floorConfig(floor).themeId;
+      if (!themeFloors.has(id)) themeFloors.set(id, floor);
+    }
+    themeFloors.forEach(function (floor, id) {
+      const theme = MD.THEMES.find(entry => entry.id === id);
+      mkBtn(theme ? MD.t(theme.nameKey || "theme." + id + ".name") : id, function () { MD.debugFloor(floor); });
     });
     panel.appendChild(document.createElement("br"));
     mkBtn("← 上一层", function () { MD.debugFloor(state.floor - 1); }, "dbg-btn dbg-small");

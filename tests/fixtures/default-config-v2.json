@@ -1,0 +1,893 @@
+{
+  "defaultDungeonId": "original",
+  "dungeons": {
+    "original": {
+      "id": "original",
+      "mapProfileId": "classic",
+      "nameKey": "dungeon.original.name",
+      "ruleProfileId": "classic",
+      "totalFloors": 24
+    },
+    "trainingGrove": {
+      "id": "trainingGrove",
+      "mapProfileId": "grove",
+      "nameKey": "dungeon.trainingGrove.name",
+      "ruleProfileId": "gentle",
+      "totalFloors": 3
+    }
+  },
+  "effects": {
+    "bellyCap": 200,
+    "bellyGrowth": 5,
+    "damageRoll": {
+      "max": 1,
+      "min": -1
+    }
+  },
+  "enemies": {
+    "bat": {
+      "atk": 4,
+      "behaviorTemplate": "chase",
+      "color": "#c4b5fd",
+      "def": 0,
+      "glyph": "蝠",
+      "hp": 5,
+      "name": "蝙蝠",
+      "nameKey": "enemy.bat.name"
+    },
+    "emberSlime": {
+      "atk": 4,
+      "behaviorTemplate": "chase",
+      "color": "#fb7185",
+      "def": 0,
+      "glyph": "焰",
+      "hp": 8,
+      "name": "焰色史莱姆",
+      "nameKey": "enemy.emberSlime.name"
+    },
+    "shell": {
+      "atk": 5,
+      "behaviorTemplate": "chase",
+      "color": "#94a3b8",
+      "def": 2,
+      "glyph": "甲",
+      "hp": 12,
+      "name": "甲壳",
+      "nameKey": "enemy.shell.name"
+    },
+    "slime": {
+      "atk": 3,
+      "behaviorTemplate": "chase",
+      "color": "#6ee7b7",
+      "def": 0,
+      "glyph": "史",
+      "hp": 6,
+      "name": "史莱姆",
+      "nameKey": "enemy.slime.name"
+    }
+  },
+  "enemyGroups": {
+    "deep": [
+      {
+        "id": "slime",
+        "weight": 0.55
+      },
+      {
+        "id": "bat",
+        "weight": 0.3
+      },
+      {
+        "id": "shell",
+        "weight": 0.15
+      }
+    ],
+    "early": [
+      {
+        "id": "slime",
+        "weight": 0.55
+      },
+      {
+        "id": "bat",
+        "weight": 0.45
+      }
+    ],
+    "groveOnly": [
+      {
+        "id": "emberSlime",
+        "weight": 1
+      }
+    ],
+    "opening": [
+      {
+        "id": "slime",
+        "weight": 0.7
+      },
+      {
+        "id": "bat",
+        "weight": 0.3
+      }
+    ]
+  },
+  "floorBands": [
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "opening",
+      "fromFloor": 1,
+      "id": "original01",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "cave",
+      "toFloor": 1
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "early",
+      "fromFloor": 2,
+      "id": "original02",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "cave",
+      "toFloor": 3
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 4,
+      "id": "original04",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "forest",
+      "toFloor": 6
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 7,
+      "id": "original07",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "wetcave",
+      "toFloor": 9
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 10,
+      "id": "original10",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "ruins",
+      "toFloor": 12
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 13,
+      "id": "original13",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "wooden",
+      "toFloor": 15
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 16,
+      "id": "original16",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "modern",
+      "toFloor": 18
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 19,
+      "id": "original19",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "cyber",
+      "toFloor": 21
+    },
+    {
+      "dungeonId": "original",
+      "enemyGroupId": "deep",
+      "fromFloor": 22,
+      "id": "original22",
+      "itemGroupId": "classicLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "future",
+      "toFloor": 24
+    },
+    {
+      "dungeonId": "trainingGrove",
+      "enemyGroupId": "groveOnly",
+      "fromFloor": 1,
+      "id": "grove01",
+      "itemGroupId": "groveLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "",
+      "themeId": "forest",
+      "toFloor": 2
+    },
+    {
+      "dungeonId": "trainingGrove",
+      "enemyGroupId": "groveOnly",
+      "fromFloor": 3,
+      "id": "grove03",
+      "itemGroupId": "groveLoot",
+      "mapProfileOverride": "",
+      "ruleProfileOverride": "classic",
+      "themeId": "wetcave",
+      "toFloor": 3
+    }
+  ],
+  "itemEffects": {
+    "foodImpact": {
+      "kind": "damage",
+      "power": 1,
+      "range": 8,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 0
+    },
+    "foodLarge": {
+      "kind": "food",
+      "power": 100,
+      "range": 0,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 0
+    },
+    "foodSmall": {
+      "kind": "food",
+      "power": 50,
+      "range": 0,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 0
+    },
+    "foodTravel": {
+      "kind": "food",
+      "power": 75,
+      "range": 0,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 0
+    },
+    "knockSwing": {
+      "kind": "knockback",
+      "power": 0,
+      "range": 100,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 5
+    },
+    "knockThrow": {
+      "kind": "knockback",
+      "power": 0,
+      "range": 10,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 5
+    },
+    "none": {
+      "kind": "none",
+      "power": 0,
+      "range": 0,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 0
+    },
+    "rockImpact": {
+      "kind": "damage",
+      "power": 8,
+      "range": 8,
+      "turnsMax": 0,
+      "turnsMin": 0,
+      "wallDamage": 0
+    },
+    "sleepThrow": {
+      "kind": "sleep",
+      "power": 0,
+      "range": 8,
+      "turnsMax": 6,
+      "turnsMin": 4,
+      "wallDamage": 0
+    },
+    "sleepUse": {
+      "kind": "sleep",
+      "power": 0,
+      "range": 0,
+      "turnsMax": 6,
+      "turnsMin": 4,
+      "wallDamage": 0
+    }
+  },
+  "itemGroups": {
+    "classicLoot": [
+      {
+        "id": "onigiri",
+        "weight": 0.38
+      },
+      {
+        "id": "bigOnigiri",
+        "weight": 0.14
+      },
+      {
+        "id": "rock",
+        "weight": 0.26
+      },
+      {
+        "id": "sleepHerb",
+        "weight": 0.12
+      },
+      {
+        "id": "knockStaff",
+        "weight": 0.1
+      }
+    ],
+    "groveLoot": [
+      {
+        "id": "travelOnigiri",
+        "weight": 1
+      }
+    ]
+  },
+  "items": {
+    "bigOnigiri": {
+      "activeSkill": 0,
+      "chargesMax": 0,
+      "chargesMin": 0,
+      "color": "#f5c16c",
+      "dropOnMiss": 1,
+      "name": "大饭团",
+      "nameKey": "item.bigOnigiri.name",
+      "passiveSkill": 0,
+      "swingEffectId": "none",
+      "throwEffectId": "foodImpact",
+      "useEffectId": "foodLarge"
+    },
+    "knockStaff": {
+      "activeSkill": 1,
+      "chargesMax": 6,
+      "chargesMin": 4,
+      "color": "#5eead4",
+      "dropOnMiss": 0,
+      "name": "击退之杖",
+      "nameKey": "item.knockStaff.name",
+      "passiveSkill": 0,
+      "swingEffectId": "knockSwing",
+      "throwEffectId": "knockThrow",
+      "useEffectId": "none"
+    },
+    "onigiri": {
+      "activeSkill": 0,
+      "chargesMax": 0,
+      "chargesMin": 0,
+      "color": "#e8d5a3",
+      "dropOnMiss": 1,
+      "name": "饭团",
+      "nameKey": "item.onigiri.name",
+      "passiveSkill": 0,
+      "swingEffectId": "none",
+      "throwEffectId": "foodImpact",
+      "useEffectId": "foodSmall"
+    },
+    "rock": {
+      "activeSkill": 1,
+      "chargesMax": 0,
+      "chargesMin": 0,
+      "color": "#9aa4b2",
+      "dropOnMiss": 1,
+      "name": "石头",
+      "nameKey": "item.rock.name",
+      "passiveSkill": 0,
+      "swingEffectId": "none",
+      "throwEffectId": "rockImpact",
+      "useEffectId": "none"
+    },
+    "sleepHerb": {
+      "activeSkill": 0,
+      "chargesMax": 0,
+      "chargesMin": 0,
+      "color": "#a78bfa",
+      "dropOnMiss": 1,
+      "name": "睡眠草",
+      "nameKey": "item.sleepHerb.name",
+      "passiveSkill": 0,
+      "swingEffectId": "none",
+      "throwEffectId": "sleepThrow",
+      "useEffectId": "sleepUse"
+    },
+    "travelOnigiri": {
+      "activeSkill": 0,
+      "chargesMax": 0,
+      "chargesMin": 0,
+      "color": "#fde68a",
+      "dropOnMiss": 1,
+      "name": "旅行饭团",
+      "nameKey": "item.travelOnigiri.name",
+      "passiveSkill": 0,
+      "swingEffectId": "none",
+      "throwEffectId": "foodImpact",
+      "useEffectId": "foodTravel"
+    }
+  },
+  "localization": {
+    "defaultLocale": "zh-CN",
+    "locales": [
+      "en",
+      "zh-CN"
+    ],
+    "texts": [
+      {
+        "key": "dungeon.choiceHint",
+        "values": {
+          "en": "Start on floor 1; return to town to change dungeons",
+          "zh-CN": "从第 1 层开始；回镇子后可切换迷宫"
+        }
+      },
+      {
+        "key": "dungeon.choose",
+        "values": {
+          "en": "Choose dungeon",
+          "zh-CN": "选择迷宫"
+        }
+      },
+      {
+        "key": "dungeon.current",
+        "values": {
+          "en": "{name} · {floors} floors",
+          "zh-CN": "{name} · 共 {floors} 层"
+        }
+      },
+      {
+        "key": "dungeon.helpStairs",
+        "values": {
+          "en": "Take the stairs to the next floor; exit the selected dungeon’s final floor to finish",
+          "zh-CN": "踩上下楼楼梯进入下一层，到所选迷宫的最后一层出口通关"
+        }
+      },
+      {
+        "key": "dungeon.newRun",
+        "values": {
+          "en": "Start new adventure",
+          "zh-CN": "开始新冒险"
+        }
+      },
+      {
+        "key": "dungeon.original.name",
+        "values": {
+          "en": "Original Dungeon",
+          "zh-CN": "原初迷宫"
+        }
+      },
+      {
+        "key": "dungeon.return",
+        "values": {
+          "en": "Return to town",
+          "zh-CN": "回镇子换迷宫"
+        }
+      },
+      {
+        "key": "dungeon.trainingGrove.name",
+        "values": {
+          "en": "Training Grove",
+          "zh-CN": "试炼林地"
+        }
+      },
+      {
+        "key": "enemy.bat.name",
+        "values": {
+          "en": "Bat",
+          "zh-CN": "蝙蝠"
+        }
+      },
+      {
+        "key": "enemy.emberSlime.name",
+        "values": {
+          "en": "Ember Slime",
+          "zh-CN": "焰色史莱姆"
+        }
+      },
+      {
+        "key": "enemy.shell.name",
+        "values": {
+          "en": "Shell",
+          "zh-CN": "甲壳"
+        }
+      },
+      {
+        "key": "enemy.slime.name",
+        "values": {
+          "en": "Slime",
+          "zh-CN": "史莱姆"
+        }
+      },
+      {
+        "key": "item.bigOnigiri.name",
+        "values": {
+          "en": "Large Rice Ball",
+          "zh-CN": "大饭团"
+        }
+      },
+      {
+        "key": "item.broken",
+        "values": {
+          "en": "{name} broke.",
+          "zh-CN": "{name}摔碎了。"
+        }
+      },
+      {
+        "key": "item.eat",
+        "values": {
+          "en": "Eat",
+          "zh-CN": "吃"
+        }
+      },
+      {
+        "key": "item.emptyCharges",
+        "values": {
+          "en": "{name} has no charges left.",
+          "zh-CN": "{name}的次数已经用尽了。"
+        }
+      },
+      {
+        "key": "item.hit",
+        "values": {
+          "en": "{name} hit {target}!",
+          "zh-CN": "{name}击中了{target}！"
+        }
+      },
+      {
+        "key": "item.knockStaff.name",
+        "values": {
+          "en": "Knockback Staff",
+          "zh-CN": "击退之杖"
+        }
+      },
+      {
+        "key": "item.landed",
+        "values": {
+          "en": "{name} landed on the ground.",
+          "zh-CN": "{name}落在了地上。"
+        }
+      },
+      {
+        "key": "item.onigiri.name",
+        "values": {
+          "en": "Rice Ball",
+          "zh-CN": "饭团"
+        }
+      },
+      {
+        "key": "item.rock.name",
+        "values": {
+          "en": "Rock",
+          "zh-CN": "石头"
+        }
+      },
+      {
+        "key": "item.sleepHerb.name",
+        "values": {
+          "en": "Sleep Herb",
+          "zh-CN": "睡眠草"
+        }
+      },
+      {
+        "key": "item.swing",
+        "values": {
+          "en": "Swing",
+          "zh-CN": "挥"
+        }
+      },
+      {
+        "key": "item.throw",
+        "values": {
+          "en": "Throw",
+          "zh-CN": "扔"
+        }
+      },
+      {
+        "key": "item.travelOnigiri.name",
+        "values": {
+          "en": "Travel Rice Ball",
+          "zh-CN": "旅行饭团"
+        }
+      },
+      {
+        "key": "item.use",
+        "values": {
+          "en": "Use",
+          "zh-CN": "使用"
+        }
+      },
+      {
+        "key": "item.used",
+        "values": {
+          "en": "Used {name}.",
+          "zh-CN": "使用了{name}。"
+        }
+      },
+      {
+        "key": "item.usedSleep",
+        "values": {
+          "en": "Used {name}… fell asleep.",
+          "zh-CN": "使用了{name}……睡着了。"
+        }
+      },
+      {
+        "key": "preview.banner",
+        "values": {
+          "en": "Designer preview · Memory saves · seed={seed} · floor={floor}",
+          "zh-CN": "设计师试玩 · 内存存档 · seed={seed} · 起始层={floor}"
+        }
+      },
+      {
+        "key": "preview.floor",
+        "values": {
+          "en": "Floor {floor}",
+          "zh-CN": "当前第 {floor} 层"
+        }
+      },
+      {
+        "key": "skill.help",
+        "values": {
+          "en": "Drag eligible items into active slots, then drag outward to aim. Right-click discards an equipped item; passive slots accept eligible items",
+          "zh-CN": "标记为主动的物品可拖入主动栏；按住向外拖动瞄准释放。右键卸下会丢弃物品；被动栏按物品资格开放"
+        }
+      },
+      {
+        "key": "skill.ineligibleActive",
+        "values": {
+          "en": "This item cannot be equipped in an active slot.",
+          "zh-CN": "这个物品不能放入主动栏。"
+        }
+      },
+      {
+        "key": "skill.ineligiblePassive",
+        "values": {
+          "en": "This item cannot be equipped in a passive slot.",
+          "zh-CN": "这个物品不能放入被动栏。"
+        }
+      },
+      {
+        "key": "theme.cave.name",
+        "values": {
+          "en": "Cave",
+          "zh-CN": "洞窟"
+        }
+      },
+      {
+        "key": "theme.cyber.name",
+        "values": {
+          "en": "Cyber",
+          "zh-CN": "赛博"
+        }
+      },
+      {
+        "key": "theme.forest.name",
+        "values": {
+          "en": "Forest",
+          "zh-CN": "森林"
+        }
+      },
+      {
+        "key": "theme.future.name",
+        "values": {
+          "en": "Future",
+          "zh-CN": "未来"
+        }
+      },
+      {
+        "key": "theme.modern.name",
+        "values": {
+          "en": "Modern",
+          "zh-CN": "现代"
+        }
+      },
+      {
+        "key": "theme.ruins.name",
+        "values": {
+          "en": "Ruins",
+          "zh-CN": "遗迹"
+        }
+      },
+      {
+        "key": "theme.wetcave.name",
+        "values": {
+          "en": "Wet Cave",
+          "zh-CN": "湿润洞窟"
+        }
+      },
+      {
+        "key": "theme.wooden.name",
+        "values": {
+          "en": "Wooden",
+          "zh-CN": "木屋"
+        }
+      }
+    ]
+  },
+  "mapProfiles": {
+    "classic": {
+      "extraLoopDivisor": 4,
+      "extraLoopMax": 2,
+      "gridColsLarge": 4,
+      "gridColsSmall": 3,
+      "gridRows": 3,
+      "gridThreshold": 56,
+      "hallChance": 0.28,
+      "hallHeightMax": 10,
+      "hallHeightMin": 6,
+      "hallWidthMax": 22,
+      "hallWidthMin": 14,
+      "height": {
+        "max": 36,
+        "min": 30
+      },
+      "loopChance": 0.4,
+      "minRooms": 5,
+      "monsterHouseChance": {
+        "max": 0.25,
+        "min": 0.15
+      },
+      "roomHeightMax": 9,
+      "roomHeightMin": 4,
+      "roomWidthMax": 12,
+      "roomWidthMin": 5,
+      "skipRoomChance": 0.18,
+      "width": {
+        "max": 60,
+        "min": 50
+      }
+    },
+    "grove": {
+      "extraLoopDivisor": 4,
+      "extraLoopMax": 2,
+      "gridColsLarge": 4,
+      "gridColsSmall": 3,
+      "gridRows": 3,
+      "gridThreshold": 56,
+      "hallChance": 0.28,
+      "hallHeightMax": 10,
+      "hallHeightMin": 6,
+      "hallWidthMax": 22,
+      "hallWidthMin": 14,
+      "height": {
+        "max": 30,
+        "min": 30
+      },
+      "loopChance": 0.4,
+      "minRooms": 5,
+      "monsterHouseChance": {
+        "max": 0,
+        "min": 0
+      },
+      "roomHeightMax": 9,
+      "roomHeightMin": 4,
+      "roomWidthMax": 12,
+      "roomWidthMin": 5,
+      "skipRoomChance": 0.1,
+      "width": {
+        "max": 50,
+        "min": 50
+      }
+    }
+  },
+  "player": {
+    "atk": 7,
+    "belly": 100,
+    "def": 2,
+    "hp": 30
+  },
+  "ruleProfiles": {
+    "classic": {
+      "enemyScale": 0.85,
+      "floorEnemyBase": 2,
+      "floorEnemyEmptyReserve": 5,
+      "floorEnemyEvery": 3,
+      "floorEnemySoftMax": 5,
+      "floorItems": {
+        "max": 6,
+        "min": 3
+      },
+      "houseEnemyAreaDivisor": 4,
+      "houseEnemyMax": 10,
+      "houseEnemyMin": 5,
+      "houseItems": {
+        "max": 7,
+        "min": 4
+      },
+      "housePreEnemyAreaDivisor": 12,
+      "housePreEnemyMax": 2,
+      "houseTriggerItems": {
+        "max": 3,
+        "min": 1
+      },
+      "idleMoveChance": 0.3,
+      "maxMonsters": 16,
+      "roomEnemyChance": 0.45,
+      "wandererEvery": 55
+    },
+    "gentle": {
+      "enemyScale": 0.65,
+      "floorEnemyBase": 2,
+      "floorEnemyEmptyReserve": 5,
+      "floorEnemyEvery": 3,
+      "floorEnemySoftMax": 5,
+      "floorItems": {
+        "max": 6,
+        "min": 3
+      },
+      "houseEnemyAreaDivisor": 4,
+      "houseEnemyMax": 10,
+      "houseEnemyMin": 5,
+      "houseItems": {
+        "max": 7,
+        "min": 4
+      },
+      "housePreEnemyAreaDivisor": 12,
+      "housePreEnemyMax": 2,
+      "houseTriggerItems": {
+        "max": 3,
+        "min": 1
+      },
+      "idleMoveChance": 0.3,
+      "maxMonsters": 10,
+      "roomEnemyChance": 0.25,
+      "wandererEvery": 55
+    }
+  },
+  "rules": {
+    "activeSlots": 2,
+    "hungerCritical": 10,
+    "hungerEvery": 10,
+    "hungerWarning": 20,
+    "maxActiveSlots": 4,
+    "maxBag": 20,
+    "maxPassiveSlots": 3,
+    "passiveSlots": 1,
+    "regenAmount": 1,
+    "regenEvery": 8,
+    "starvationDamage": 1,
+    "starvationLogEvery": 3
+  },
+  "themeCatalog": {
+    "cave": {
+      "nameKey": "theme.cave.name"
+    },
+    "cyber": {
+      "nameKey": "theme.cyber.name"
+    },
+    "forest": {
+      "nameKey": "theme.forest.name"
+    },
+    "future": {
+      "nameKey": "theme.future.name"
+    },
+    "modern": {
+      "nameKey": "theme.modern.name"
+    },
+    "ruins": {
+      "nameKey": "theme.ruins.name"
+    },
+    "wetcave": {
+      "nameKey": "theme.wetcave.name"
+    },
+    "wooden": {
+      "nameKey": "theme.wooden.name"
+    }
+  },
+  "version": 2
+}

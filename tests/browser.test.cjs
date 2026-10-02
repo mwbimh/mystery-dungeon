@@ -75,7 +75,7 @@ test('seeded preview repeats floor layout and leaves persistent storage unchange
     await loaded(page);
     await page.evaluate(() => { localStorage.clear(); localStorage.setItem('md-test-sentinel', 'preserve'); localStorage.setItem('md_warehouse_v1', JSON.stringify([{ id: 'normal-save' }])); });
     const initialStorage = await page.evaluate(() => JSON.stringify(Object.entries(localStorage).sort()));
-    const floor = Math.min(4, await page.evaluate(() => MD.config.rules.totalFloors));
+    const floor = Math.min(4, await page.evaluate(() => MD.config.dungeons[MD.dungeonId].totalFloors));
     const preview = `?designer=1&seed=42&floor=${floor}&flat=1&debug=1`;
     await loaded(page, preview);
     const first = await snapshot(page);
@@ -96,24 +96,15 @@ test('seeded preview repeats floor layout and leaves persistent storage unchange
 
 test('editing Excel player.hp then converting changes the actual preview player', async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'md-workbook-browser-'));
-  const workbook = path.join(temporary, 'game.xlsx');
   const output = path.join(temporary, 'game.json');
   let context;
   try {
-    execFileSync('python3', ['-c', [
-      'import sys, openpyxl',
-      'book = openpyxl.load_workbook(sys.argv[1])',
-      'sheet = book["Settings"]',
-      'headers = {cell.value: cell.column for cell in sheet[1]}',
-      'for row in range(2, sheet.max_row + 1):',
-      '    if sheet.cell(row, headers["path"]).value == "player.hp":',
-      '        sheet.cell(row, headers["value"]).value = 47',
-      '        break',
-      'else:',
-      '    raise AssertionError("player.hp row missing")',
-      'book.save(sys.argv[2])',
-    ].join('\n'), path.join(ROOT, 'config/game.xlsx'), workbook], { cwd: ROOT, stdio: 'pipe' });
-    execFileSync('python3', ['tools/convert_config.py', '--workbook', workbook, '--output', output], { cwd: ROOT, stdio: 'pipe' });
+    for (const file of ['rules.xlsx','monsters.xlsx','items.xlsx','dungeons.xlsx','spawns.xlsx','texts.xlsx']) {
+      fs.copyFileSync(path.join(ROOT,'config',file),path.join(temporary,file));
+    }
+    // Artifact Tool-authored literal workbook fixture, compiled by real Luban.
+    fs.copyFileSync(path.join(ROOT,'tests/fixtures/player-hp47-rules.xlsx'),path.join(temporary,'rules.xlsx'));
+    execFileSync('python3', ['tools/convert_config.py', '--config-dir', temporary, '--output', output], { cwd: ROOT, stdio: 'pipe' });
     generatedOverride = fs.readFileSync(output);
     assert.equal(JSON.parse(generatedOverride).player.hp, 47);
     context = await browser.newContext();
@@ -157,12 +148,12 @@ test('static build includes generated configuration and boots independently', as
   for (const name of ['index.html', 'js/config.js', 'config/game.json', 'config/schema.json']) {
     assert.ok(fs.existsSync(path.join(ROOT, 'dist', name)), name);
   }
-  assert.equal(fs.existsSync(path.join(ROOT, 'dist', 'config/game.xlsx')), false);
+  for(const file of ['rules.xlsx','monsters.xlsx','items.xlsx','dungeons.xlsx','spawns.xlsx','texts.xlsx'])assert.equal(fs.existsSync(path.join(ROOT,'dist/config',file)),false);
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
     const built = JSON.parse(fs.readFileSync(path.join(ROOT, 'dist/config/game.json'), 'utf8'));
-    const floor = Math.min(2, built.rules.totalFloors);
+    const floor = Math.min(2, built.dungeons[built.defaultDungeonId].totalFloors);
     await page.goto(base + `/dist/index.html?designer=1&seed=42&floor=${floor}&flat=1`);
     await page.waitForFunction(floor => window.MD_STATE && MD_STATE.floor === floor, floor);
     assert.equal(await page.evaluate(() => MD_STATE.mode), 'dungeon');
@@ -184,7 +175,7 @@ test('Excel localization switches names to English without changing saved item I
     await loaded(page, '?flat=1&lang=en');
     const result = await page.evaluate(() => {
       const item = MD.loadWarehouse()[0];
-      const text = key => MD.config.localization.texts.find(row => row.key === key).en;
+      const text = key => MD.config.localization.texts.find(row => row.key === key).values.en;
       return {
         type: item.type,
         itemName: MD.displayName(item),
@@ -201,4 +192,45 @@ test('Excel localization switches names to English without changing saved item I
     assert.equal(result.enemyName, result.expectedEnemy);
     assert.equal(result.raw, saved);
   } finally { await context.close(); }
+});
+
+test('second workbook dungeon selects, persists, renders variant assets and completes at its own floor', async () => {
+  const context=await browser.newContext(),page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  try {
+    await loaded(page,'?flat=1&debug=1&lang=en');
+    await page.locator('#dungeonSelect').selectOption('trainingGrove');
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('md-expedition-v1')).dungeonId),'trainingGrove');
+    await page.reload();await page.waitForFunction(()=>window.MD_STATE);
+    assert.equal(await page.locator('#dungeonSelect').inputValue(),'trainingGrove');
+    await page.locator('#btnNewRun').click();
+    await page.waitForFunction(()=>MD_STATE.mode==='dungeon');
+    const actual=await page.evaluate(()=>({id:MD.dungeonId,width:MD_STATE.map.width,height:MD_STATE.map.height,enemy:MD_STATE.enemies.map(e=>e.type),items:MD_STATE.items.map(i=>i.type),theme:MD_STATE.theme.id}));
+    assert.equal(actual.id,'trainingGrove');assert.equal(actual.width,50);assert.equal(actual.height,30);assert.equal(actual.theme,'forest');
+    assert.ok(actual.enemy.length>0&&actual.enemy.every(id=>id==='emberSlime'));assert.ok(actual.items.length>0&&actual.items.every(id=>id==='travelOnigiri'));
+    fs.mkdirSync(path.join(ROOT,'test-results'),{recursive:true});
+    await page.screenshot({path:path.join(ROOT,'test-results/multidungeon-training-grove.png'),fullPage:true});
+    for(const id of ['emberSlime','travelOnigiri'])assert.equal((await page.request.get(base+`/assets/runtime/${id}.png`)).status(),200);
+    assert.equal(await page.evaluate(()=>{try{MD.selectDungeon('original');return false;}catch(_){return true;}}),true);
+    await page.evaluate(()=>{MD.debugFloor(3);MD_STATE.enemies=[];MD_STATE.player.x=MD_STATE.map.stairs.x;MD_STATE.player.y=MD_STATE.map.stairs.y;});
+    await page.keyboard.press('Space');await page.locator('#endOverlay:not(.hidden)').waitFor();
+    assert.equal(await page.evaluate(()=>MD_STATE.endKind),'clear');
+    await page.locator('#btnEndOk').click();
+    assert.equal(await page.evaluate(()=>MD_STATE.mode),'town');
+    await page.locator('#dungeonSelect').selectOption('original');await page.locator('#btnNewRun').click();
+    assert.deepEqual(await page.evaluate(()=>({dungeon:MD_STATE.dungeonId,floor:MD_STATE.floor,total:MD.config.dungeons[MD.dungeonId].totalFloors,leaked:MD_STATE.enemies.some(e=>e.type==='emberSlime')||MD_STATE.items.some(i=>i.type==='travelOnigiri')})),{dungeon:'original',floor:1,total:24,leaked:false});
+    assert.deepEqual(errors,[]);
+  } finally {await context.close();}
+});
+
+test('invalid dungeon URL and selected floor overflow show a recoverable config error', async () => {
+  const context=await browser.newContext(),page=await context.newPage();
+  try {
+    for(const query of ['?dungeon=missing&flat=1','?designer=1&dungeon=trainingGrove&floor=4&flat=1']) {
+      await page.goto(base+'/index.html'+query);await page.locator('#configError').waitFor();
+      assert.equal(await page.evaluate(()=>typeof MD_STATE),'undefined');
+    }
+    await loaded(page,'?designer=1&dungeon=trainingGrove&floor=3&flat=1');
+    assert.equal(await page.evaluate(()=>MD_STATE.floor),3);
+  } finally {await context.close();}
 });

@@ -1,334 +1,192 @@
 #!/usr/bin/env python3
-"""Validate Excel cell literals, invoke pinned Luban, adapt its typed JSON for the game."""
-import argparse
-import json
-import math
-import os
+"""Six Excel domains → pinned Luban 5.1 → shared runtime validation → atomic JSON.
+
+openpyxl reads cell types/coordinates only. Every exported value comes from
+Luban's typed JSON. There is deliberately no alternate Excel-to-JSON exporter.
+"""
+import argparse,json,math,os,re,shutil,subprocess,sys,tempfile
 from pathlib import Path
-import re
-import shutil
-import subprocess
-import sys
-import tempfile
 import openpyxl
+from config_contract import ROOT,TABLES,GLOBALS,RULES,MAPS
 
-ROOT = Path(__file__).resolve().parents[1]
-HEADERS = {
-    'Settings': ['path', 'value'],
-    'Enemies': ['id', 'nameKey', 'color', 'hp', 'atk', 'def', 'glyph'],
-    'Items': ['id', 'nameKey', 'color'],
-    'EnemySpawns': ['fromFloor', 'id', 'weight'],
-    'ItemDrops': ['id', 'weight'],
-    'Themes': ['position', 'id'],
-    'ThemeCatalog': ['id', 'nameKey'],
-    'Texts': ['key', 'zhCN', 'en'],
-    'Documentation': ['field', 'type', 'description', 'constraints', 'example'],
-}
-NUMERIC = {('Settings', 'value'), ('Enemies', 'hp'), ('Enemies', 'atk'), ('Enemies', 'def'), ('EnemySpawns', 'fromFloor'), ('EnemySpawns', 'weight'), ('ItemDrops', 'weight'), ('Themes', 'position')}
+MAX_BYTES=4*1024*1024
+class ConfigError(ValueError):pass
 
-class ConfigError(ValueError):
-    pass
-
-
-def leaves(schema, prefix=()):
-    if schema['type'] == 'object':
-        for key, child in schema['properties'].items():
-            yield from leaves(child, (*prefix, key))
-    else:
-        yield prefix, schema
-
-
-def preflight(workbook, expected):
-    """Check Excel representation only; Luban owns table types, indices and refs."""
-    result = {}
-    try:
-        book = openpyxl.load_workbook(workbook, data_only=False)
-    except Exception as exc:
-        raise ConfigError(f'{workbook}:Workbook!A1: cannot read workbook: {exc}') from exc
-    try:
-        if set(book.sheetnames) != set(expected):
-            raise ConfigError(f'{workbook}:Workbook!A1: expected sheets {expected}, got {book.sheetnames}')
-        for name in expected:
-            ws = book[name]
-            headers = HEADERS[name]
-            if name != 'Documentation':
-                headers = ['##var', *headers]
-            if ws.merged_cells.ranges:
-                raise ConfigError(f'{workbook}:{name}!A1: merged cells are forbidden')
-            if [ws.cell(1, i+1).value for i in range(len(headers))] != headers:
-                raise ConfigError(f'{workbook}:{name}!A1: expected headers {headers}')
-            rows = []
-            for cells in ws.iter_rows():
-                for cell in cells:
-                    if cell.data_type in ('f', 'e'):
-                        raise ConfigError(f'{workbook}:{name}!{cell.coordinate}: formulas and Excel errors are forbidden; paste literal values')
-                    if cell.column > len(headers) and cell.value is not None:
-                        raise ConfigError(f'{workbook}:{name}!{cell.coordinate}: unexpected extra column')
-                row = cells[0].row
-                if row == 1 or name == 'Documentation':
-                    continue
-                values = [ws.cell(row, col+1).value for col in range(len(headers))]
-                if row == 2:
-                    if values[0] != '##':
-                        raise ConfigError(f'{workbook}:{name}!A2: required ## description row')
-                    continue
-                if all(v is None for v in values):
-                    continue
-                if values[0] is not None:
-                    raise ConfigError(f'{workbook}:{name}!A{row}: data marker must be empty; hidden/comment data rows forbidden')
-                for col, value in enumerate(values[1:], 2):
-                    address = f'{workbook}:{name}!{openpyxl.utils.get_column_letter(col)}{row}'
-                    field = headers[col-1]
-                    if value is None or value == '':
-                        raise ConfigError(f'{address}: required cell is blank')
-                    if (name, field) in NUMERIC:
-                        if type(value) not in (int, float) or not math.isfinite(value):
-                            raise ConfigError(f'{address}: expected finite native number; numeric text and boolean forbidden')
-                        if (name, field) not in {('Settings','value'),('EnemySpawns','weight'),('ItemDrops','weight')} and value != int(value):
-                            raise ConfigError(f'{address}: expected integer')
-                    elif not isinstance(value, str) or value != value.strip():
-                        raise ConfigError(f'{address}: expected text with no leading/trailing whitespace')
-                rows.append((row, values[1:]))
-            result[name] = rows
-    finally:
-        book.close()
-    return result
-
-
-def convert(workbook, texts=None, dotnet=None, luban=None):
-    workbook = Path(workbook)
-    texts = Path(texts) if texts else ROOT / 'config/texts.xlsx'
-    locations = {}
-    tables = preflight(workbook, [name for name in HEADERS if name != 'Texts'])
-    tables.update(preflight(texts, ['Texts']))
-    schema = json.loads((ROOT / 'config/schema.json').read_text(encoding='utf-8'))
-    def loc(path, sheet, row=1, col='B'):
-        locations[tuple(path)] = (texts if sheet == 'Texts' else workbook, sheet, row, col)
-    def fail(path, message):
-        file, sheet, row, col = locations.get(tuple(path), (workbook, 'Documentation', 1, 'A'))
-        raise ConfigError(f'{file}:{sheet}!{col}{row}: {".".join(map(str,path))}: {message}')
-    dotnet = dotnet or os.environ.get('DOTNET_COMMAND', 'dotnet')
-    luban = Path(luban or os.environ.get('LUBAN_DLL', str(ROOT / '.tools/luban/Luban/Luban.dll')))
-    if not luban.is_file():
-        raise ConfigError(f'{workbook}:Workbook!A1: Luban missing at {luban}; run python tools/install_luban.py (no fallback exporter)')
-    with tempfile.TemporaryDirectory(prefix='mystery-dungeon-luban-') as temporary:
-        stage = Path(temporary)
-        shutil.copy2(workbook, stage / 'game.xlsx')
-        shutil.copy2(texts, stage / 'texts.xlsx')
-        shutil.copytree(ROOT / 'config/Defines', stage / 'Defines')
-        shutil.copy2(ROOT / 'config/luban.conf', stage / 'luban.conf')
-        command = [str(dotnet), str(luban.resolve()), '--conf', str(stage / 'luban.conf'), '-t', 'client', '-d', 'json', '--strict', '--errorFormat', 'json', '-x', f'outputDataDir={stage / "output"}']
+def preflight(directory):
+    tables={}; files={}
+    for filename in sorted({t['book'] for t in TABLES.values()}):
+        path=directory/filename
+        try:book=openpyxl.load_workbook(path,data_only=False)
+        except Exception as e:raise ConfigError(f'{path}:Workbook!A1: cannot read workbook: {e}') from e
         try:
-            compiled = subprocess.run(command, cwd=stage, text=True, capture_output=True, timeout=120)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise ConfigError(f'{workbook}:Workbook!A1: could not run Luban: {exc}') from exc
-        if compiled.returncode:
-            diagnostics = compiled.stdout + compiled.stderr
-            # Luban's reference diagnostics identify table/field/value but omit
-            # cells. Add source coordinates from preflight without re-exporting.
-            pointers = []
-            def point(sheet, field, value):
-                if sheet not in tables or field not in HEADERS[sheet]:
-                    return
-                column = HEADERS[sheet].index(field)
-                for row, values in tables[sheet]:
-                    if values[column] == value:
-                        file = texts if sheet == 'Texts' else workbook
-                        pointers.append(f'{file}:{sheet}!{openpyxl.utils.get_column_letter(column+2)}{row}')
-            for match in re.finditer(r'record (\w+)(?:\[[^\]]*\])?\.(\w+)(?: = |:)(.*?) \(from file:', diagnostics):
-                try:
-                    point(match[1], match[2], json.loads(match[3]))
-                except ValueError:
-                    pass
-            for match in re.finditer(r'\{\s*"version"\s*:', diagnostics):
-                try:
-                    report, _ = json.JSONDecoder().raw_decode(diagnostics[match.start():])
-                    for error in report.get('errors', []):
-                        if error.get('code') == 'error.data.duplicate_key':
-                            sheet, field, value = error['args'][:3]
-                            point(sheet, field, json.loads(value))
-                except (ValueError, KeyError):
-                    pass
-            if pointers:
-                diagnostics = '\n'.join(dict.fromkeys(pointers)) + '\n' + diagnostics
-            diagnostics = diagnostics.replace(str(stage) + '/./game.xlsx', str(workbook)).replace(str(stage) + '/./texts.xlsx', str(texts)).replace(str(stage / 'game.xlsx'), str(workbook)).replace(str(stage / 'texts.xlsx'), str(texts))
-            raise ConfigError(f'{workbook}:Workbook!A1: Luban failed (exit {compiled.returncode}); no outputs published\n{diagnostics}')
-        exported = {name: json.loads((stage / 'output' / f'{name.lower()}.json').read_text(encoding='utf-8')) for name in HEADERS if name != 'Documentation'}
-    data = {}
-    setting_specs = {'.'.join(path): (path, spec) for path, spec in leaves(schema) if path[0] in ('version','player','rules','map','effects') or path == ('themes','floorsPerTheme')}
-    seen = set()
-    for i, entry in enumerate(exported['Settings']):
-        key, value = entry['path'], entry['value']
-        row = tables['Settings'][i][0]
-        loc((key,), 'Settings', row)
-        if key not in setting_specs:
-            fail((key,), 'unknown setting path')
-        path, _ = setting_specs[key]
-        loc(path, 'Settings', row, 'C')
-        seen.add(key)
-        target = data
-        for part in path[:-1]:
-            target = target.setdefault(part, {})
-        target[path[-1]] = value
-    for key in setting_specs.keys() - seen:
-        loc((key,), 'Settings')
-        fail((key,), 'missing required setting')
-    text_by_key = {entry['key']:entry for entry in exported['Texts']}
-    name_keys = {entry['nameKey'] for sheet in ('Enemies','Items','ThemeCatalog') for entry in exported[sheet]}
-    data['localization'] = {'defaultLocale': 'zh-CN', 'texts': exported['Texts']}
-    loc(('localization','texts'), 'Texts')
-    for i, entry in enumerate(exported['Texts']):
-        for col, field in enumerate(HEADERS['Texts'], 2):
-            loc(('localization','texts',i,field), 'Texts', tables['Texts'][i][0], openpyxl.utils.get_column_letter(col))
-        placeholders = []
-        for field in ('zhCN','en'):
-            value = entry[field]
-            names = re.findall(r'\{([A-Za-z][A-Za-z0-9_]*)\}', value)
-            if '{' in re.sub(r'\{[A-Za-z][A-Za-z0-9_]*\}', '', value) or '}' in re.sub(r'\{[A-Za-z][A-Za-z0-9_]*\}', '', value):
-                fail(('localization','texts',i,field), 'malformed placeholder; use {identifier}')
-            placeholders.append(set(names))
-        if entry['key'] in name_keys and placeholders[0]:
-            fail(('localization','texts',i,'zhCN'), 'display names cannot contain placeholders')
-        if entry['key'] == 'preview.banner' and placeholders[0] != {'seed','floor'}:
-            fail(('localization','texts',i,'zhCN'), 'preview.banner must contain exactly {seed} and {floor}')
-        if placeholders[0] != placeholders[1]:
-            fail(('localization','texts',i,'en'), 'placeholder names must match zhCN exactly')
-    for sheet, section in [('Enemies','enemies'),('Items','items')]:
-        data[section] = {}
-        for i, entry in enumerate(exported[sheet]):
-            key = entry['id']; row = tables[sheet][i][0]
-            loc((section,key), sheet, row)
-            if key not in schema['properties'][section]['properties']:
-                fail((section,key), 'unknown stable ID: behavior/assets require code support')
-            value = {k:v for k,v in entry.items() if k != 'id'}
-            value['name'] = text_by_key[value['nameKey']]['zhCN']
-            data[section][key] = value
-            for col, field in enumerate(HEADERS[sheet], 2):
-                loc((section,key,field), sheet, row, openpyxl.utils.get_column_letter(col))
-        for key in schema['properties'][section]['properties'].keys() - data[section].keys():
-            loc((section,key), sheet)
-            fail((section,key), 'missing stable ID')
-    data['enemySpawns'] = []
-    for n, entry in enumerate(exported['EnemySpawns']):
-        row = tables['EnemySpawns'][n][0]
-        floor = entry['fromFloor']
-        if not data['enemySpawns'] or data['enemySpawns'][-1]['fromFloor'] != floor:
-            data['enemySpawns'].append({'fromFloor':floor,'entries':[]})
-        i = len(data['enemySpawns'])-1; entries = data['enemySpawns'][i]['entries']; j = len(entries)
-        loc(('enemySpawns',i,'fromFloor'), 'EnemySpawns', row, 'B')
-        loc(('enemySpawns',i,'entries'), 'EnemySpawns', row, 'C')
-        loc(('enemySpawns',i,'entries',j,'id'), 'EnemySpawns', row, 'C')
-        loc(('enemySpawns',i,'entries',j,'weight'), 'EnemySpawns', row, 'D')
-        entries.append({'id':entry['id'],'weight':entry['weight']})
-    data['itemDrops'] = exported['ItemDrops']
-    for i, entry in enumerate(data['itemDrops']):
-        loc(('itemDrops',i,'id'), 'ItemDrops', tables['ItemDrops'][i][0], 'B')
-        loc(('itemDrops',i,'weight'), 'ItemDrops', tables['ItemDrops'][i][0], 'C')
-    data['themes']['order'] = []
-    for i, entry in enumerate(exported['Themes']):
-        loc(('themes','order',i), 'Themes', tables['Themes'][i][0], 'C')
-        if entry['position'] != i+1:
-            loc(('position',), 'Themes', tables['Themes'][i][0], 'B'); fail(('position',), f'position must be {i+1}')
-        data['themes']['order'].append(entry['id'])
-    expected_themes = schema['properties']['themes']['properties']['order']['items']['enum']
-    catalog = {entry['id']:entry['nameKey'] for entry in exported['ThemeCatalog']}
-    if set(catalog) != set(expected_themes):
-        loc(('themeCatalog',), 'ThemeCatalog'); fail(('themeCatalog',), 'catalog must match supported renderer IDs')
-    for key in expected_themes:
-        if catalog[key] != f'theme.{key}.name':
-            loc(('themeCatalog',key), 'ThemeCatalog'); fail(('themeCatalog',key), 'expected nameKey theme.<id>.name')
-    if 'preview.banner' not in text_by_key:
-        loc(('preview.banner',), 'Texts'); fail(('preview.banner',), 'required runtime text key missing')
-    for section, sheet in [('enemySpawns','EnemySpawns'),('itemDrops','ItemDrops')]:loc((section,),sheet)
-    loc(('themes','order'),'Themes')
-    def validate(value, spec, path=()):
-        kind = spec['type']
-        if kind in ('integer', 'number'):
-            if type(value) not in (int, float) or not math.isfinite(value) or (kind == 'integer' and value != int(value)):
-                fail(path, f'expected finite {kind} cell (numeric text/booleans forbidden)')
-            if not spec.get('minimum', -math.inf) <= value <= spec.get('maximum', math.inf):
-                fail(path, f'value outside [{spec.get("minimum")}, {spec.get("maximum")}]')
-        elif kind == 'string':
-            if not isinstance(value, str):
-                fail(path, 'expected text cell')
-            if not spec.get('minLength', 0) <= len(value) <= spec.get('maxLength', math.inf):
-                fail(path, 'invalid text length')
-            if 'pattern' in spec and not re.fullmatch(spec['pattern'], value):
-                fail(path, f'must match {spec["pattern"]}')
-            if 'enum' in spec and value not in spec['enum']:
-                fail(path, f'unknown ID; expected one of {spec["enum"]}')
-        elif kind == 'object':
-            if type(value) != dict or set(value) != set(spec['properties']):
-                fail(path, 'missing or unknown object keys')
-            for key, child in spec['properties'].items():
-                validate(value[key], child, (*path, key))
-            if 'min' in value and 'max' in value and value['min'] > value['max']:
-                fail((*path, 'max'), 'max must be >= min')
-        elif kind == 'array':
-            if type(value) != list or not spec.get('minItems', 0) <= len(value) <= spec.get('maxItems', math.inf):
-                fail(path, 'invalid number of rows')
-            for i, child in enumerate(value):
-                validate(child, spec['items'], (*path, i))
-        else:
-            fail(path, f'unsupported schema type {kind}')
-    validate(data, schema)
-    if data['effects']['bellyCap'] < data['player']['belly']:
-        fail(('effects', 'bellyCap'), 'must be >= player.belly')
-    previous = 0
-    for i, group in enumerate(data['enemySpawns']):
-        floor = group['fromFloor']
-        if (i == 0 and floor != 1) or floor <= previous or floor > data['rules']['totalFloors']:
-            fail(('enemySpawns', i, 'fromFloor'), 'floors must start at 1, strictly ascend, and not exceed rules.totalFloors')
-        previous = floor
-    for path, entries in [(('itemDrops',), data['itemDrops'])] + [(('enemySpawns', i, 'entries'), g['entries']) for i,g in enumerate(data['enemySpawns'])]:
-        ids = set()
-        for i, entry in enumerate(entries):
-            if entry['id'] in ids:
-                fail((*path, i, 'id'), 'duplicate ID in weight group')
-            ids.add(entry['id'])
-        if sum(entry['weight'] for entry in entries) <= 0:
-            fail((*path, 0, 'weight'), 'group weights must sum to > 0')
-    # Canonical keys and native integer normalization make output independent of row ordering.
-    def canonical(value, spec):
-        if spec['type'] == 'object':
-            return {key: canonical(value[key], child) for key, child in spec['properties'].items()}
-        if spec['type'] == 'array':
-            return [canonical(v, spec['items']) for v in value]
-        return int(value) if spec['type'] == 'integer' else value
-    result = canonical(data, schema)
-    if len((json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + '\n').encode('utf-8')) > 256 * 1024:
-        fail((), 'generated game.json exceeds runtime limit of 256 KiB')
-    return result
+            expected={n for n,t in TABLES.items() if t['book']==filename}|{'Guide','Fields'}
+            if set(book.sheetnames)!=expected:raise ConfigError(f'{path}:Workbook!A1: expected sheets {sorted(expected)}, got {book.sheetnames}')
+            for name in book.sheetnames:
+                ws=book[name]
+                for cells in ws:
+                    for c in cells:
+                        if c.data_type in ('f','e'):raise ConfigError(f'{path}:{name}!{c.coordinate}: formulas and Excel errors forbidden; use literal values (notes are not exported)')
+                if name not in TABLES:continue
+                fields=TABLES[name]['fields'];headers=['##var']+[f['name'] for f in fields]
+                if ws.sheet_state != 'visible':raise ConfigError(f'{path}:{name}!A1: data sheets must remain visible')
+                if ws.merged_cells.ranges:raise ConfigError(f'{path}:{name}!A1: merged data cells forbidden')
+                if [ws.cell(1,i+1).value for i in range(len(headers))]!=headers:raise ConfigError(f'{path}:{name}!A1: expected headers {headers}')
+                for cells in ws.iter_rows():
+                    for cell in cells:
+                        if cell.column>len(headers) and cell.value is not None:raise ConfigError(f'{path}:{name}!{cell.coordinate}: unexpected extra column')
+                if ws.cell(2,1).value!='##':raise ConfigError(f'{path}:{name}!A2: missing description row')
+                records=[]
+                for row in range(3,ws.max_row+1):
+                    values=[ws.cell(row,i+2).value for i in range(len(fields))]
+                    if not any(v is not None for v in values):continue
+                    if ws.row_dimensions[row].hidden:raise ConfigError(f'{path}:{name}!A{row}: hidden data rows forbidden; show rows before compiling')
+                    if ws.cell(row,1).value is not None:raise ConfigError(f'{path}:{name}!A{row}: data marker must be blank')
+                    for col,field in enumerate(fields,2):
+                        value=ws.cell(row,col).value;where=f'{path}:{name}!{openpyxl.utils.get_column_letter(col)}{row}'
+                        if value is None or value=='':
+                            if field['optional']:continue
+                            raise ConfigError(f'{where}: required cell is blank')
+                        if field['type'] in ('int','double'):
+                            if type(value) not in (int,float) or not math.isfinite(value) or (field['type']=='int' and value!=int(value)):raise ConfigError(f'{where}: expected finite native {field["type"]}; numeric text, fractions/boolean forbidden')
+                        elif not isinstance(value,str) or value!=value.strip():raise ConfigError(f'{where}: expected trimmed text')
+                    for col in range(len(headers)+1,ws.max_column+1):
+                        if ws.cell(row,col).value is not None:raise ConfigError(f'{path}:{name}!{openpyxl.utils.get_column_letter(col)}{row}: unexpected extra column')
+                    records.append((row,values))
+                tables[name]=records;files[name]=path
+        finally:book.close()
+    return tables,files
 
+def convert(directory=None,dotnet=None,luban=None):
+    directory=Path(directory or ROOT/'config');tables,files=preflight(directory)
+    locations={}
+    def at(sheet,i=0,field=None):
+        row=tables[sheet][i][0] if i<len(tables[sheet]) else 1
+        col=2+[f['name'] for f in TABLES[sheet]['fields']].index(field) if field else 2
+        return f'{files[sheet]}:{sheet}!{openpyxl.utils.get_column_letter(col)}{row}'
+    def loc(path,sheet,i=0,field=None):locations[path]=at(sheet,i,field)
+    def fail(sheet,i,field,message):raise ConfigError(f'{at(sheet,i,field)}: {message}')
+    dotnet=dotnet or os.environ.get('DOTNET_COMMAND','dotnet');luban=Path(luban or os.environ.get('LUBAN_DLL',str(ROOT/'.tools/luban/Luban/Luban.dll')))
+    if not luban.is_file():raise ConfigError(f'{directory}:Workbook!A1: Luban missing; run python tools/install_luban.py (no fallback exporter)')
+    with tempfile.TemporaryDirectory(prefix='mystery-luban-') as tmp:
+        stage=Path(tmp)
+        for filename in sorted({t['book'] for t in TABLES.values()}):shutil.copy2(directory/filename,stage/filename)
+        shutil.copytree(ROOT/'config/Defines',stage/'Defines');shutil.copy2(ROOT/'config/luban.conf',stage/'luban.conf')
+        command=[str(dotnet),str(luban.resolve()),'--conf',str(stage/'luban.conf'),'-t','client','-d','json','--strict','--errorFormat','json','-x',f'outputDataDir={stage/"output"}']
+        try:compiled=subprocess.run(command,cwd=stage,text=True,capture_output=True,timeout=120)
+        except (OSError,subprocess.TimeoutExpired) as e:raise ConfigError(f'{directory}:Workbook!A1: could not run Luban: {e}') from e
+        if compiled.returncode:
+            diagnostics=compiled.stdout+compiled.stderr;pointers=[]
+            def point(sheet,field,value):
+                if sheet not in TABLES:return
+                names=[f['name'] for f in TABLES[sheet]['fields']]
+                if field not in names:return
+                for i,(_,values) in enumerate(tables[sheet]):
+                    if values[names.index(field)]==value:pointers.append(at(sheet,i,field))
+            for m in re.finditer(r'record (\w+)(?:\[[^\]]*\])?\.(\w+)(?: = |:)(.*?) \(from file:',diagnostics):
+                try:point(m[1],m[2],json.loads(m[3]))
+                except ValueError:pass
+            for m in re.finditer(r'\{\s*"version"\s*:',diagnostics):
+                try:
+                    report,_=json.JSONDecoder().raw_decode(diagnostics[m.start():])
+                    for error in report.get('errors',[]):
+                        if error.get('code')=='error.data.duplicate_key':
+                            sheet,field,value=error['args'][:3];point(sheet,field,json.loads(value))
+                except (ValueError,KeyError):pass
+            for filename in {t['book'] for t in TABLES.values()}:diagnostics=diagnostics.replace(str(stage)+'/./'+filename,str(directory/filename)).replace(str(stage/filename),str(directory/filename))
+            raise ConfigError('\n'.join(dict.fromkeys(pointers))+f'\n{directory}:Workbook!A1: Luban failed; no outputs published\n'+diagnostics)
+        exported={name:json.loads((stage/'output'/f'{name.lower()}.json').read_text()) for name in TABLES}
+    def nested_set(target,path,value):
+        keys=path.split('.');p=target
+        for k in keys[:-1]:p=p.setdefault(k,{})
+        p[keys[-1]]=value
+    data={'version':2}
+    def settings(sheet,specs,target,prefix,rows):
+        seen=set()
+        for i,row in rows:
+            key=row['path'];loc(prefix+'.'+key,sheet,i,'value')
+            if key not in specs:fail(sheet,i,'path','unknown setting path')
+            if key in seen:fail(sheet,i,'path','duplicate setting path')
+            seen.add(key);value=row['value'];spec=specs[key]
+            if spec[5] and value!=int(value):fail(sheet,i,'value','expected integer')
+            nested_set(target,key,int(value) if spec[5] else value)
+        for key in specs.keys()-seen:fail(sheet,0,'path','missing setting '+key)
+    settings('Settings',GLOBALS,data,'$',list(enumerate(exported['Settings'])))
+    for label,specs in [('Rule',RULES),('Map',MAPS)]:
+        section=label.lower()+'Profiles';data[section]={}
+        for pi,profile in enumerate(exported[label+'Profiles']):
+            id=profile['id'];data[section][id]={};loc('$.'+section+'.'+id,label+'Profiles',pi,'id')
+            settings(label+'Values',specs,data[section][id],'$.'+section+'.'+id,[(i,r) for i,r in enumerate(exported[label+'Values']) if r['profileId']==id])
+    locales=exported['Locales'];defaults=[r['id'] for r in locales if r['isDefault']==1]
+    if len(defaults)!=1:fail('Locales',0,'isDefault','exactly one default locale is required')
+    for i,r in enumerate(locales):
+        if r['isDefault'] not in (0,1):fail('Locales',i,'isDefault','expected 0 or 1')
+        if not re.fullmatch(r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*',r['id']):fail('Locales',i,'id','expected locale such as zh-CN, en, ja')
+    textrows={r['key']:{'key':r['key'],'values':{}} for r in exported['TextKeys']}
+    for i,r in enumerate(exported['Translations']):
+        if r['locale'] in textrows[r['key']]['values']:fail('Translations',i,'locale','duplicate key+locale translation')
+        textrows[r['key']]['values'][r['locale']]=r['text']
+    texts=sorted(textrows.values(),key=lambda r:r['key']);indices={r['key']:i for i,r in enumerate(texts)}
+    for i,r in enumerate(exported['TextKeys']):loc('$.localization.texts['+str(indices[r['key']])+']','TextKeys',i,'key')
+    for i,r in enumerate(exported['Translations']):loc('$.localization.texts['+str(indices[r['key']])+'].values.'+r['locale'],'Translations',i,'text')
+    loc('$.localization.defaultLocale','Locales',0,'isDefault');loc('$.localization.texts','TextKeys',0,'key')
+    data['localization']={'defaultLocale':defaults[0],'locales':sorted(r['id'] for r in locales),'texts':texts}
+    for sheet,section in [('Enemies','enemies'),('Items','items'),('ItemEffects','itemEffects'),('ThemeCatalog','themeCatalog'),('Dungeons','dungeons')]:
+        data[section]={}
+        for i,row in enumerate(exported[sheet]):
+            id=row['id'];entry={k:v for k,v in row.items() if k not in ('id','isDefault')};data[section][id]=entry
+            if sheet=='Dungeons':entry['id']=id
+            if sheet in ('Enemies','Items'):entry['name']=textrows[entry['nameKey']]['values'].get(defaults[0],'')
+            loc('$.'+section+'.'+id,sheet,i,'id')
+            for field in row:loc('$.'+section+'.'+id+'.'+field,sheet,i,field)
+            if sheet in ('Enemies','Items'):loc('$.'+section+'.'+id+'.name',sheet,i,'nameKey')
+    defaults=[r['id'] for r in exported['Dungeons'] if r['isDefault']==1]
+    if len(defaults)!=1:fail('Dungeons',0,'isDefault','exactly one default dungeon required')
+    for i,r in enumerate(exported['Dungeons']):
+        if r['isDefault'] not in (0,1):fail('Dungeons',i,'isDefault','expected 0 or 1')
+    data['defaultDungeonId']=defaults[0]
+    data['floorBands']=sorted(exported['FloorBands'],key=lambda r:(r['dungeonId'],r['fromFloor'],r['id']))
+    for i,r in enumerate(exported['FloorBands']):
+        n=data['floorBands'].index(r)
+        for f in r:loc(f'$.floorBands[{n}].{f}','FloorBands',i,f)
+        loc(f'$.floorBands[{n}]','FloorBands',i,'id')
+    for prefix in ['Enemy','Item']:
+        section=prefix.lower()+'Groups';data[section]={r['id']:[] for r in exported[prefix+'Groups']}
+        for gi,r in enumerate(exported[prefix+'Groups']):loc('$.'+section+'.'+r['id'],prefix+'Groups',gi,'id')
+        for i,r in enumerate(exported[prefix+'Spawns']):
+            group=data[section][r['groupId']];n=len(group);group.append({'id':r['id'],'weight':r['weight']})
+            for f in ['id','weight']:loc(f'$.{section}.{r["groupId"]}[{n}].{f}',prefix+'Spawns',i,f)
+    # Shared semantic validator is also the browser's untrusted-import validator.
+    validator="const fs=require('fs'),vm=require('vm');vm.runInThisContext(fs.readFileSync(process.argv[1],'utf8'));const p=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify(MDConfig.validate(p,JSON.parse(fs.readFileSync(process.argv[2],'utf8')))));"
+    result=subprocess.run(['node','-e',validator,str(ROOT/'js/config.js'),str(ROOT/'config/schema.json')],input=json.dumps(data,ensure_ascii=False),text=True,capture_output=True,timeout=30)
+    if result.returncode:raise ConfigError(f'{directory}:Workbook!A1: runtime validator failed: {result.stderr}')
+    errors=json.loads(result.stdout)
+    if errors:
+        messages=[]
+        for e in errors:
+            path=e.split(': ',1)[0];candidates=[p for p in locations if path==p or path.startswith(p+'.') or path.startswith(p+'[')]
+            source=locations[max(candidates,key=len)] if candidates else f'{directory}:Workbook!A1'
+            messages.append(source+': '+e)
+        raise ConfigError('\n'.join(messages))
+    for section in ['enemies','items']:
+        for id in data[section]:
+            filename={'sleepHerb':'herb','knockStaff':'staff'}.get(id,id)
+            asset=ROOT/'assets/runtime'/f'{filename}.png'
+            if not asset.is_file() or asset.read_bytes()[:8]!=b'\x89PNG\r\n\x1a\n':raise ConfigError(f'{locations["$."+section+"."+id]}: missing valid asset {asset}; IDs map directly to filenames')
+    if len((json.dumps(data,ensure_ascii=False,indent=2,sort_keys=True)+'\n').encode())>MAX_BYTES:raise ConfigError(f'{directory}:Workbook!A1: generated config exceeds 4MiB; split delivery before expanding further')
+    return data
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--workbook', type=Path, default=ROOT / 'config/game.xlsx')
-    parser.add_argument('--output', type=Path, default=ROOT / 'config/game.json')
-    parser.add_argument('--texts', type=Path, default=ROOT / 'config/texts.xlsx')
-    parser.add_argument('--dotnet', help='dotnet executable; defaults to DOTNET_COMMAND or PATH')
-    parser.add_argument('--luban', help='Luban.dll; defaults to LUBAN_DLL or .tools installation')
-    parser.add_argument('--check', action='store_true', help='validate only; do not write output')
-    args = parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--config-dir',type=Path,default=ROOT/'config');parser.add_argument('--output',type=Path,default=ROOT/'config/game.json');parser.add_argument('--dotnet');parser.add_argument('--luban');parser.add_argument('--check',action='store_true');args=parser.parse_args()
     try:
-        data = convert(args.workbook, args.texts, args.dotnet, args.luban)
+        data=convert(args.config_dir,args.dotnet,args.luban)
         if not args.check:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            content = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
-            temporary = None
+            args.output.parent.mkdir(parents=True,exist_ok=True);temporary=None
             try:
-                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n', dir=args.output.parent, delete=False) as handle:
-                    temporary = Path(handle.name)
-                    handle.write(content)
+                with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',newline='\n',dir=args.output.parent,delete=False) as handle:
+                    temporary=Path(handle.name);handle.write(json.dumps(data,ensure_ascii=False,indent=2,sort_keys=True,allow_nan=False)+'\n')
                 temporary.replace(args.output)
             finally:
-                if temporary and temporary.exists():
-                    temporary.unlink()
-        print(f'Validated {args.workbook}' + ('' if args.check else f' -> {args.output}'))
-        return 0
-    except (ConfigError, OSError) as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-
-if __name__ == '__main__':
-    sys.exit(main())
+                if temporary and temporary.exists():temporary.unlink()
+        print(f'Validated six domain workbooks at {args.config_dir}'+('' if args.check else f' -> {args.output}'));return 0
+    except (ConfigError,OSError) as e:print(str(e),file=sys.stderr);return 1
+if __name__=='__main__':sys.exit(main())

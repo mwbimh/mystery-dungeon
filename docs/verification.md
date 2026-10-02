@@ -1,68 +1,88 @@
-# 本次验收记录
+# 多迷宫配置验收
 
-日期：2026-10-02。基线：`5ab2ad7f02ea773c9c25a68688f7ce3404060c05`；分支：`feature/designer-config`。只修改 mystery-dungeon，未推送、部署或合并。
+本页用于检查六本 Excel 到实际游戏的完整链路。旧版两工作簿的测试计数、生成哈希和“已通过”记录不能证明版本 2 已通过；本轮必须针对最终代码与工作簿重新执行。
 
-## 已执行
+## 当前内容基准
 
-| 检查 | 结果 |
+- 数值权威源是 `rules / monsters / items / dungeons / spawns / texts.xlsx`，无 `game.xlsx` 兼容导出路径
+- 配置版本 2；当前示例有 2 个迷宫、4 种怪物、6 种物品及 11 个楼层段。这些数量是示例内容，不是限制设计师新增/删减合法记录的断言
+- `original` 24 层沿用原数值和固定种子行为；`trainingGrove` 3 层验证新 ID、独立组、逐层配置与覆盖。`emberSlime / travelOnigiri` 是复用已有模板的变体
+- 历史基线见 [baseline.md](baseline.md)。`tests/fixtures/default-config-v1.json` 与 `default-config-v2.json` 是回归证据，不进入生产配置链路
+
+## 执行记录
+
+本轮本地最终检查：`npm run check` 通过（103 项 JavaScript 测试、24 项 Python 测试），`npm run build` 通过。真实 Chromium 浏览器测试尚未完成：本地 Chromium 受 socket 权限限制，云浏览器也无法访问本地服务。必须由候选 SHA 的 GitHub CI 完成浏览器阶段后再更新预览；下面的脚本级玩法证据不能替代浏览器验收。
+
+| 检查 | 成功标准 |
 | --- | --- |
-| 改造前全部 `js/*.js` 的 `node --check` | 通过；原仓库没有构建/测试/静态类型检查任务 |
-| `MD_TEST_BASELINE=1 node --test tests/baseline.test.cjs` | 10/10；固定原始提交通过 `git show` 加载 |
-| `npm run check` | Excel 经实际 Luban 导出成功；所有游戏 JS 语法通过；65/65 Node 测试，26/26 Python 测试 |
-| `npm run build` | 通过；重新转换后生成独立静态 `dist/` |
-| `npm run test:browser` | 6/6；真实 Chromium，非 DOM mock |
-| `git diff --check` | 通过 |
+| `python3 tools/convert_config.py --check` | 六本实际源表经固定官方 Luban、项目验证全部成功，无最终 JSON 写入 |
+| `npm run check` | 本地通过：真实 Luban 转换、JS 语法、103 项 Node 回归、24 项 Python 检查 |
+| `npm run build` | 本地通过：重新转换并生成独立 `dist/`，真实 PNG 检查通过 |
+| `npm run test:browser` | 本地环境受阻，未完成；需 GitHub CI 验证真实 Chromium |
+| `git diff --check` | 本轮文档与属性修改检查通过；提交前再次检查整个变更 |
+| GitHub CI | 待执行/确认：候选完整 SHA 的 `Release route`、`Validate workbook and game`（含浏览器） |
+| 私有 Sites 与人工确认 | 待发布/验收：来源 SHA 对得上，用户明确确认该候选版本 |
 
-本地：Node.js 24.19.0、Python 3.12.14、openpyxl 3.1.5、py7zr 1.1.3、Playwright 1.58.2、Chromium 151.0.7922.173、固定官方 Luban v5.1.0。.NET SDK 8.0.408 在独立目录运行最终全量检查，确保与 CI pin 一致。CI 指定 Node.js 22；该 CI 配置尚未在 GitHub 执行，本地 Node 版本差异不记为 CI 已通过。
+CI 使用 Node 22、Python 3.12、.NET SDK 8.0.408 和固定 Luban 5.1.0。本地实际版本、完整命令、结果与候选 SHA 应记录在 PR；本地通过不能冒充托管 CI 或线上验收通过。配置管线不允许 mock Luban、备用导出或复用旧 JSON。
 
-本环境命令（等价于 README 的 PATH 安装方式）：
+## 补充的本地验证证据
 
-```sh
-DOTNET_COMMAND=/tmp/md-dotnet-pinned/dotnet PYTHONPATH=/tmp/md-py7zr npm run check
-DOTNET_COMMAND=/tmp/md-dotnet-pinned/dotnet npm run build
-DOTNET_COMMAND=/tmp/md-dotnet-pinned/dotnet npm run test:browser
+- 独立检查完成 49 项；在隔离副本中编辑实际 Excel，增加第三个迷宫、新实体 ID、效果、地图/规则/权重组和按 ID 命名的 PNG，再经真实 Luban 导出，加载完整游戏脚本验证。工作簿由实际表格工具生成/编辑，没有用手写 JSON 代替这条链路
+- 9 组非法 Excel 实验检查错误来源单元格与失败保留上次成功产物
+- 116 组合法极端地图参数生成 348 张地图进行检查，另有 28 组不安全参数被拒绝
+- 六本源表和隔离 `player-hp47-rules.xlsx` fixture 检查了原生下拉、数值限制、固定 ID 列、译文换行等填写辅助；这不等于已在桌面 Excel 手工验收全部观感与操作
+- 上述玩法脚本使用 VM/脚本测试环境；**没有据此宣称真实浏览器、3D、手机或线上预览已经通过**
+
+## 必须覆盖的自动回归
+
+### 配置与导出
+
+- 六本工作簿读取；表头、必填格、原生数字、整数/范围、空白、公式（含 Guide/Fields）、错误格、重复 ID、合并格与额外列
+- 真实 Luban 引用错误；缺工具/失败不能发布部分数据，不能覆盖上次成功 JSON
+- 相同输入确定性导出；配置与浏览器共同 4 MiB 上限；未知字段/版本/模板拒绝
+- 规则组的完整 path、min/max、地图/网格/房间容纳、权重总和、重复组成员
+- 每个迷宫 1–末层独立连续覆盖；缺口、重叠、越界、断组引用、无效覆盖拒绝
+- 每个文本 key 的所有已声明语言完整；重复 `(key, locale)`、缺译、非法/不一致占位符拒绝；新增完整语言无需 schema 改动
+- 运行参数与注释分离：说明、单位、范围、示例及翻译语境不泄漏到运行配置
+
+### 实际玩法与兼容
+
+- 原始默认玩家/怪物数值、随机调用顺序与历史种子地图；合法 Excel 平衡调整与冻结历史基线分开验证
+- 逐迷宫/逐楼层选主题、地图、规则、怪物和物品组；覆盖优先级正确且不污染共享目录
+- 新合法 ID 通过 `chase` 与食物/睡眠/伤害/击退模板执行，而非硬编码为旧 ID；次数、射程、落空掉落与主动栏资格生效
+- 地图边界、房间与楼梯可达；极端合法参数不能生成越界图
+- 镇子选择、重复开始、结束后再开始、最终层出口与死亡/通关回镇；冒险中不能切换，不能把选择器当逃离机制
+- 正常选择保存并在刷新后恢复；旧仓库/技能键与载荷保留；试玩不读取或改写正式存储
+- 非法/缺失 JSON 阻断启动；修复后重新加载恢复；`dist/` 独立启动不依赖源码目录
+
+## 设计师人工验收步骤
+
+1. 普通模式进镇子，选择 `trainingGrove`，点击“开始新冒险”；确认迷宫名与总层数正确，冒险中选择器禁用
+2. 在第 1–2 层检查森林、林地地图、焰色史莱姆和旅行饭团；第 3 层检查湿洞主题及 `classic` 整组规则覆盖；最终出口应通关，不再生成第 4 层
+3. 通关回镇切换 `original`，确认从第 1 层开始，旧局地图、敌人、物品和计时状态不串入新局；检查默认 24 层及旧出怪/主题分段
+4. 对死亡和通关分别检查现有随身物品处理：死亡丢弃背包/装备，通关带回物品，仓库保持。选择迷宫不能提前带物品逃离
+5. 用 `?designer=1&dungeon=trainingGrove&seed=42&floor=3&debug=1&flat=1` 重载两次，按同样动作比较结果；确认试玩标识与存储隔离
+6. 加 `&lang=en` 检查名称、新迷宫界面、物品动作及占位符；原有中文 UI/日志按下述边界记录，不当作全英文完成
+7. 在独立源表副本把 `rules.xlsx / Settings` 的 `player.hp` 改为 47，通过 Luban 生成后在隔离试玩环境确认实际初始生命；保留原表，完成后恢复并重建
+8. 去掉 `flat=1` 检查新 PNG、所有主题、背包/技能图标；在目标桌面/手机设备检查操作与布局。程序通过不能代替 3D、触屏和美术验收
+
+## 产物来源与发布门槛
+
+```text
+六本 Excel → 固定 Luban 临时表 JSON → 项目验证/适配
+→ config/game.json → dist/config/game.json → 私有预览 → 人工确认 → 正式发布
 ```
 
-### 覆盖内容
+构建目录配置应与本次新生成配置的 SHA-256 一致。CI `build-info.json` 记录 checkout SHA、分支、CI URL、生成配置哈希与六本工作簿哈希；Sites `deployment.json` 另记录 GitHub 来源 SHA 与 Sites 部署映射。GitHub 源码 SHA 与 Sites 源码 SHA 不应混为一谈。
 
-- 默认玩家/敌人、伤害、道具次数、掉落与出怪概率边界不变；五组历史地图 SHA-256 不变。
-- 80 个极端地图样本检查边界、房间和楼梯可达；额外只读审查运行 3,200 个边界样本，未发现生成崩溃（后者不是新增固定测试集）。
-- Excel 类型/范围/空值/公式/重复 ID/断引用/结构、权重/min-max/楼层、缺工具、缺译/占位符、生成体积、确定性及失败保留上次成功产物。
-- 本地化文本 key、Unicode 字符长度、调用参数契约、中英实体名称和存档 ID 保留。
-- 浏览器：正常镇子进入地牢；固定种子重载；实际回合推进；试玩存储与正式存储隔离；Excel `player.hp=47` 经 Luban 后实际玩家生命为 47；非法/缺失配置阻断、修复后重载恢复；独立 `dist/` 启动。
-- Luban `--strict` 错误仍可能产生临时文件，测试确认这些文件不会发布到运行配置。
+流程是 `design → preview` PR、CI、合并后的准确 SHA 构建、同一个私有 Sites、人工验收，再 `preview → main` PR。不得把源码已修改、PR 已创建或 CI 通过当作已上线；也不因预览失败而发布公开站或跳过人工确认。见 [release-pipeline.md](release-pipeline.md)。
 
-### 合法设计改动不会被旧基线拦截
+## 明确保留的边界
 
-另在隔离仓库副本中，把真实表的 `player.hp` 改成 47、`rules.totalFloors` 改成 1、删除超出楼层的生成组并反转 Texts 数据行顺序，再运行 `check`、`build` 和浏览器测试：全部通过（65 Node + 26 Python + 6 浏览器）。原工作簿已保持默认值，实验仅在临时目录。
-
-历史数值来自 `tests/fixtures/default-config-v1.json`，只用于回归，不是另一份生产配置。真实 Excel 单独执行编译/结构校验和实际浏览器消费，合法平衡变化无需改写历史断言。
-
-## 产物与 CI 消费链
-
-`config/game.xlsx` + `config/texts.xlsx` → 固定 Luban / 临时表 JSON → 项目校验与适配 → `config/game.json` → `dist/config/game.json`。
-
-最终源生成 JSON 与构建 JSON SHA-256 相同：
-
-```
-81d78546d53c18f2dfced49a6881b927e1e092216f9f7ae160b56c87251e9388
-```
-
-`dist/index.html` 引导 `js/config.js`，实际 fetch `config/game.json` 与 `config/schema.json`，校验成功后才启动游戏。无遗留硬编码默认配置回退。CI PR 和 main push 使用同一链路，并上传 `mystery-dungeon-static` artifact；没有写回 main 或部署步骤。
-
-## 尚未验收与保留边界
-
-- 未在桌面 Excel 或 LibreOffice 手工检验表格观感、撤销栈及多人协作；已通过 openpyxl 实际保存/重开和程序校验，提供了批注、数值范围、下拉及恢复步骤。
-- 浏览器自动测试使用 2D；未进行 3D/WebGL 视觉验收、手机/控制器实机验收或长期平衡试玩。
-- 正常城镇入口自动验收使用可见入口按钮聚焦后 Enter。鼠标中心点点击曾未进入，可能与原有悬停几何变化有关；未确认原因，也未改变原 UI。交付前应人工确认城镇鼠标入口。
-- 当前本地化接入敌人、物品、主题名称及试玩提示；原有帮助、按钮、其他叙事文案没有全部迁移。英文为初稿，需审校。
-- 现有敌人/道具行为 ID 保持固定；新增 AI、技能行为、资源、完整 UI 翻译和存档迁移仍需工程扩展。已建立可扩展的 Luban schema/引用/文本 key 管线，未声称任意新行为可仅靠表格实现。
-- 无 TypeScript 配置；JS 语法检查不是静态类型检查。GitHub 托管 CI 未执行，不把本地成功冒充云端成功。
-
-## 素材命名约定补充验收
-
-用户选择内部 ID 对应素材，不新增 MonsterVisuals 或外观字段。核对现有 slime/bat/shell/player 映射后保留运行时不变，补充 `docs/asset-naming.md`。
-
-新增资源测试发现初始环境中的 PNG 是尚未展开的 Git LFS 指针：上面的首次 2D/browser 和构建测试没有验证图片本体，不应据此认为素材完整。现已拉取并 checkout 原有 93 个 runtime LFS 对象（约 40 MB），没有修改图片内容；CI checkout 启用 LFS，构建新增 PNG 文件头检查，拒绝指针文件。
-
-补充执行：`node --test tests/assets.test.cjs` 2/2；`python3 -m unittest discover -s tests -p 'test_asset_validation.py'` 2/2；实际素材构建通过；拉取真实素材后 `npm run test:browser` 6/6。新增测试运行原精灵加载器的路径逻辑，检查内部 ID、方向图、人物动作图路径及文件存在性；不把显示名当文件名。不新增尺寸、图集或动画配置，也未进行 3D 视觉验收。
+- 没有完整冒险存档。`md-expedition-v1` 仅保存所选迷宫；不持久化地图、楼层进度、回合与随身背包。仓库和技能元数据按原行为保存
+- 死亡/通关处理仍由现有代码负责，没有新增可配结算策略、经验/升级、商店或中途逃离机制
+- 参数化的生成器仍有代码定义的房间留边、走廊绘制与连通规则；主题材质、灯光、粒子不是 Excel 数据
+- 任意合法 ID 只能复用支持的行为/效果。新 AI、全新技能、被动能力和新主题仍需工程支持
+- 新名称、迷宫界面及物品动作已本地化，原有 UI、帮助与叙事日志仍部分中文；英文需人工审校
+- 3D/WebGL、触屏/控制器、桌面 Excel 观感/撤销与长期平衡必须另作人工验收，自动测试不代表这些项目已完成
+- JS 语法检查不等于静态类型检查；本地通过不等于远端 CI、部署、人工接受或正式发布成功
