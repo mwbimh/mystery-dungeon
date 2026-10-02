@@ -40,8 +40,9 @@ async function readyMenu(page) {
   // Boot may play the OP before loading the game scripts. Skip through the same
   // visible control a player uses; never claim the VM tests cover this path.
   await page.waitForFunction(() => window.MD_STATE && document.getElementById('loadingScreen').hidden);
-  const skip = page.locator('#openingSkip');
-  if (await skip.count()) await skip.click();
+  // Atomic setup dismissal avoids natural OP expiry between count() and click().
+  // Dedicated tests below exercise actual keyboard and visible-button input.
+  await page.evaluate(() => document.getElementById('openingSkip')?.click());
   await page.waitForFunction(() => window.MD_STATE);
   if (await page.evaluate(() => !!MD.preview)) return;
   await page.waitForFunction(() => window.MDMenu);
@@ -265,6 +266,8 @@ test('OP skip reaches the four-part main menu without starting hidden gameplay',
     await page.goto(base + '/index.html?flat=1');
     await page.locator('#openingSkip').waitFor();
     await page.keyboard.press('Enter');
+    // Do not let readyMenu's setup fallback conceal a broken keyboard handler.
+    await page.locator('#openingScreen').waitFor({ state: 'detached', timeout: 2000 });
     await readyMenu(page);
     for (const id of ['menuNew', 'menuContinue', 'menuSettings', 'menuAbout']) await page.locator('#' + id).waitFor();
     assert.equal(await page.locator('#menuContinue').isDisabled(), true);
@@ -345,7 +348,18 @@ test('wrong files and cancelled overwrite never replace an occupied slot', async
     for (const [name, buffer] of [['picture.png', Buffer.from([137, 80, 78, 71])], ['bad.json', Buffer.from('{')]]) {
       await menuIdle(page);
       const chooserEvent = page.waitForEvent('filechooser'); await page.locator('button[data-slot="1"][data-action="import"]').click();
+      await page.evaluate(() => {
+        window.__thisImportRejected = false;
+        const notice = document.getElementById('menuNotice');
+        const observer = new MutationObserver(() => {
+          if (notice.classList.contains('is-error') && notice.textContent) {
+            window.__thisImportRejected = true; observer.disconnect();
+          }
+        });
+        observer.observe(notice, { childList: true, subtree: true, characterData: true, attributes: true });
+      });
       await (await chooserEvent).setFiles({ name, mimeType: name.endsWith('png') ? 'image/png' : 'application/json', buffer });
+      await page.waitForFunction(() => window.__thisImportRejected === true);
       await menuIdle(page);
       await page.waitForFunction(() => document.getElementById('menuNotice').classList.contains('is-error'));
       assert.deepEqual(await savedSnapshot(page), expected);
@@ -383,27 +397,38 @@ test('settings persist across reload; reduced motion and failed OP art still rea
   } finally { await context.close(); }
 });
 
-test('OP scenes and narrow-screen title render before the main menu', async () => {
+test('OP scenes, narrow title and exact automatic completion render with controlled browser time', async () => {
   const context = await browser.newContext({ reducedMotion: 'no-preference', viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   try {
+    // The real OP timers run under Playwright's clock. Pausing between scene
+    // boundaries prevents CI/screenshot latency from consuming its 12s lifetime.
+    // Production OP scheduling code is unchanged; its registered callbacks run
+    // at exact test-clock boundaries, including the asserted completion deadline. Screenshots finish CSS transitions for stable frames.
+    await page.clock.install({ time: new Date('2026-10-02T00:00:00Z') });
+    await page.addInitScript(() => localStorage.setItem('md-settings-v1', JSON.stringify({ version: 1, playOpening: false, reducedMotion: false, renderer: 'flat' })));
+    await loaded(page, '?flat=1', false);
+    await page.clock.pauseAt(new Date('2026-10-02T00:10:00Z'));
+    await page.evaluate(() => { window.__openingResult = null; MDOpening.play({ reducedMotion: false }).then(result => { window.__openingResult = result; }); });
     fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
-    await page.goto(base + '/index.html?flat=1');
-    await page.locator('#openingScreen[data-scene="lantern"]').waitFor();
-    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-lantern.png'), fullPage: true });
-    await page.locator('#openingScreen[data-scene="passage"]').waitFor();
-    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-passage.png'), fullPage: true });
-    await page.locator('#openingScreen[data-scene="title"]').waitFor();
-    // A scene change starts a crossfade; inspect the finished composition rather
-    // than a frame where the previous shot and transparent title overlap.
-    await page.waitForFunction(() => ['.md-opening-title', '.md-opening-portrait', '.md-opening-lockup'].every(selector => {
-      const node = document.querySelector(selector);
-      return node && Number(getComputedStyle(node).opacity) >= 0.99;
-    }));
-    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-title.png'), fullPage: true });
+    assert.equal(await page.locator('#openingScreen').getAttribute('data-scene'), 'lantern');
+    await page.locator('.md-opening-full-art').evaluate(image => image.decode());
+    assert.equal(await page.locator('.md-opening-full-art').evaluate(image => image.naturalWidth > 0), true);
+    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-lantern.png'), animations: 'disabled', fullPage: true });
+    await page.clock.runFor(2500);
+    assert.equal(await page.locator('#openingScreen').getAttribute('data-scene'), 'passage');
+    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-passage.png'), animations: 'disabled', fullPage: true });
+    await page.clock.runFor(3900);
+    assert.equal(await page.locator('#openingScreen').getAttribute('data-scene'), 'title');
+    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-title.png'), animations: 'disabled', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-title-mobile.png'), fullPage: true });
-    await page.locator('#openingSkip').click(); await readyMenu(page);
+    await page.screenshot({ path: path.join(ROOT, 'test-results/opening-title-mobile.png'), animations: 'disabled', fullPage: true });
+    await page.clock.runFor(5599);
+    assert.equal(await page.locator('#openingScreen').count(), 1);
+    await page.clock.runFor(1);
+    assert.equal(await page.locator('#openingScreen').count(), 0);
+    assert.equal(await page.evaluate(() => window.__openingResult.reason), 'completed');
+    await page.clock.resume();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.equal(await page.locator('#menuNew').isVisible(), true);
   } finally { await context.close(); }
@@ -443,13 +468,15 @@ test('two live tabs cannot silently overwrite each other and stale progress rema
   } finally { await context.close(); }
 });
 
-test('default renderer can autosave a rendered dungeon and reload it without renderer internals', async () => {
+test('actual default 3D renderer autosaves and reloads without renderer internals', async () => {
   const context = await browser.newContext({ reducedMotion: 'reduce' }), page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   try {
     await loaded(page, '?debug=1');
     await page.locator('#btnNewRun').click();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    // Only view3d.actorId assigns this marker; 2D fallback cannot satisfy this.
+    assert.match(await page.evaluate(() => MD_STATE.player._vid || ''), /^a[0-9]+$/);
     await menuClick(page, '#btnSessionMenu');
     const expected = await savedSnapshot(page);
     assert.equal(Object.hasOwn(expected.player, '_vid'), false);

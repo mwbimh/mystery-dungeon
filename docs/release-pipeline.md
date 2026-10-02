@@ -23,7 +23,7 @@
 - Pages job 依赖验证完成，并独占 `pages: write` / `id-token: write` 权限及 `github-pages` 环境；不创建 PAT、部署密钥或机器账号。部署采用官方 `configure-pages`、`upload-pages-artifact`、`deploy-pages` actions。
 - PR/preview 的新构建取消同分支旧构建；main 发布不取消正在进行的运行，Pages 部署串行。
 
-本地重现：按 [Excel 工作流](excel-workflow.md) 安装工具，再依次执行 `npm ci`、`npm run check`、`npm run build`、`npm run test:browser:stable`。菜单等待应依据 aria-busy 与真实 DOM/存储完成条件，OP 截图等待实际淡入完成，不得用固定 sleep、删断言或跳过用例掩盖竞态。CI 完成测试后才运行 `python tools/write_build_info.py`，避免浏览器测试重新构建时清除元数据。
+本地重现：按 [Excel 工作流](excel-workflow.md) 安装工具，再依次执行 `npm ci`、`npm run check`、`npm run build`、`npm run test:browser:stable`。菜单等待应依据 aria-busy 与真实 DOM/存储完成条件，OP 截图用 Playwright 受控时钟推进实际注册的场景回调、校验 12 秒完成边界并捕获 CSS 稳定终帧；另独立验证键盘跳过和真实 WebGL 标记。不得用固定 sleep、删断言或跳过用例掩盖竞态。CI 完成测试后才运行 `python tools/write_build_info.py`，避免浏览器测试重新构建时清除元数据。
 
 ## GitHub Pages 一次性配置与首次上线
 
