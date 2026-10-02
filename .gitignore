@@ -1,2 +1,31 @@
-assets/ref/
-tmp/
+# Local agent configuration and working notes
+/.agent/
+/.agents/
+/.codex/
+/.claude/
+AGENTS.md
+CLAUDE.md
+/design-brief.md
+
+# Art references, generation prompts, logs and intermediate outputs
+/assets/ref/
+/tmp/
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+/.venv/
+/venv/
+
+# Local secrets (keep shareable examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Editor and operating system files
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

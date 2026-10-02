@@ -29,7 +29,7 @@
     floorCorrMem: new THREE.Color(0x6e7c78),
     wallVis: new THREE.Color(0xf0e4f8),
     wallMem: new THREE.Color(0x6a6278),
-    black: new THREE.Color(0x3a4250),
+    black: new THREE.Color(0x05060a),
   };
 
   let renderer = null;
@@ -44,8 +44,13 @@
 
   let floorMesh = null;
   let wallMesh = null;
+  let floorMeshB = null;
+  let wallMeshB = null;
+  let edgeMesh = null;
   let floorMeta = [];
   let wallMeta = [];
+  let floorMetaB = [];
+  let wallMetaB = [];
   let lastMap = null;
   let lastVisSig = "";
 
@@ -59,6 +64,8 @@
   let hemi = null;
   let dirtTex = null;
   let rockTex = null;
+  let dirtTexB = null;
+  let rockTexB = null;
   let currentTheme = null;
   let pendingTheme = null;
 
@@ -131,18 +138,123 @@
     }
   }
 
+  let fxDotTexture = null;
+  let fxLayers = [];
+  let fxLastT = 0;
+  let groundMesh = null;
+
+  function fxDot() {
+    if (fxDotTexture) return fxDotTexture;
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext("2d");
+    const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.45, "rgba(255,255,255,0.6)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    fxDotTexture = new THREE.CanvasTexture(c);
+    return fxDotTexture;
+  }
+
+  function clearFx() {
+    for (const L of fxLayers) {
+      scene.remove(L.group);
+      L.geo.dispose();
+      L.mat.dispose();
+    }
+    fxLayers = [];
+  }
+
+  function initFx(theme) {
+    clearFx();
+    const list = (theme && theme.fx) || [];
+    for (const cfg of list) {
+      const N = cfg.count;
+      const colors = cfg.colors.map(function (c) { return new THREE.Color(c); });
+      const pos = new Float32Array(N * 3);
+      const col = new Float32Array(N * 3);
+      const seeds = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        pos[i * 3] = (Math.random() - 0.5) * cfg.spread;
+        pos[i * 3 + 1] = Math.random() * cfg.height;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * cfg.spread;
+        const c = colors[i % colors.length];
+        col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+        seeds[i] = Math.random() * Math.PI * 2;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+      const mat = new THREE.PointsMaterial({
+        size: cfg.size,
+        map: fxDot(),
+        vertexColors: true,
+        transparent: true,
+        opacity: cfg.opacity,
+        depthWrite: false,
+        sizeAttenuation: true,
+        fog: true,
+        blending: cfg.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      });
+      const points = new THREE.Points(geo, mat);
+      points.frustumCulled = false;
+      const group = new THREE.Group();
+      group.add(points);
+      group.visible = false;
+      scene.add(group);
+      fxLayers.push({ group: group, geo: geo, mat: mat, cfg: cfg, seeds: seeds });
+    }
+  }
+
+  function updateFx(now, cx, cz) {
+    const dt = Math.min(0.05, (now - fxLastT) / 1000 || 0.016);
+    fxLastT = now;
+    const t = now / 1000;
+    for (const L of fxLayers) {
+      L.group.position.set(cx, 0, cz);
+      L.group.visible = true;
+      const pos = L.geo.attributes.position.array;
+      const n = pos.length / 3;
+      for (let i = 0; i < n; i++) {
+        let y = pos[i * 3 + 1] - L.cfg.fall * dt;
+        if (L.cfg.fall > 0 && y < 0.06) y = L.cfg.height;
+        if (L.cfg.fall < 0 && y > L.cfg.height) y = 0.06;
+        pos[i * 3 + 1] = y;
+        pos[i * 3] += Math.sin(t * 0.8 + L.seeds[i]) * L.cfg.sway * dt;
+      }
+      L.geo.attributes.position.needsUpdate = true;
+    }
+  }
+
+  function hideFx() {
+    for (const L of fxLayers) L.group.visible = false;
+  }
+
   function setTheme(theme) {
     if (!theme) return;
     if (!active || !scene) { pendingTheme = theme; return; }
     if (currentTheme === theme) return;
     currentTheme = theme;
-    if (scene.fog) scene.fog.color.set(theme.fog);
+    if (scene.fog) {
+      scene.fog.color.set(theme.fog);
+      if (theme.fogDensity && scene.fog.density != null) scene.fog.density = theme.fogDensity;
+    }
     if (scene.background && scene.background.set) scene.background.set(theme.fog);
     if (renderer) renderer.setClearColor(theme.fog, 1);
+    if (groundMesh) {
+      groundMesh.material.color.set(theme.fog).multiplyScalar(0.25);
+    }
     if (hemi) {
       hemi.color.set(theme.hemiSky);
       hemi.groundColor.set(theme.hemiGround);
     }
+    if (playerLight && theme.lightColor) {
+      playerLight.color.set(theme.lightColor);
+    }
+    initFx(theme);
     // vertex tint palette (updateVisibility refreshes colours when sig changes)
     if (theme.tints) {
       COL.floorRoomVis.set(theme.tints.floorRoomVis);
@@ -179,6 +291,34 @@
         wallMesh.material.needsUpdate = true;
       }
     });
+    if (theme.floorTexB && theme.wallTexB) {
+      tryLoadRuntimeCaveTex(theme.floorTexB, function (tex) {
+        dirtTexB = tex;
+        if (floorMeshB && floorMeshB.material) {
+          floorMeshB.material.map = tex;
+          floorMeshB.material.needsUpdate = true;
+        }
+      }, function () {
+        dirtTexB = makeSeamlessTex(256, 77, theme.palFloor);
+        if (floorMeshB && floorMeshB.material) {
+          floorMeshB.material.map = dirtTexB;
+          floorMeshB.material.needsUpdate = true;
+        }
+      });
+      tryLoadRuntimeCaveTex(theme.wallTexB, function (tex) {
+        rockTexB = tex;
+        if (wallMeshB && wallMeshB.material) {
+          wallMeshB.material.map = tex;
+          wallMeshB.material.needsUpdate = true;
+        }
+      }, function () {
+        rockTexB = makeSeamlessTex(256, 91, theme.palWall);
+        if (wallMeshB && wallMeshB.material) {
+          wallMeshB.material.map = rockTexB;
+          wallMeshB.material.needsUpdate = true;
+        }
+      });
+    }
   }
 
   function tryLoadRuntimeCaveTex(name, onReady, onError) {
@@ -527,9 +667,15 @@
   function clearMap() {
     disposeMesh(floorMesh);
     disposeMesh(wallMesh);
+    disposeMesh(floorMeshB);
+    disposeMesh(wallMeshB);
+    disposeMesh(edgeMesh);
     floorMesh = wallMesh = null;
+    floorMeshB = wallMeshB = edgeMesh = null;
     floorMeta = [];
     wallMeta = [];
+    floorMetaB = [];
+    wallMetaB = [];
     if (stairsRoot) {
       while (stairsRoot.children.length) {
         const ch = stairsRoot.children[0];
@@ -550,11 +696,11 @@
     this.meta = [];
   }
 
-  Builder.prototype.vert = function (x, y, z, u, v, meta) {
+  Builder.prototype.vert = function (x, y, z, u, v, meta, col) {
     const i = this.meta.length;
     this.pos.push(x, y, z);
     this.uv.push(u, v);
-    this.col.push(0.02, 0.012, 0.02);
+    this.col.push(col ? col[0] : 0.02, col ? col[1] : 0.012, col ? col[2] : 0.02);
     this.meta.push(meta);
     return i;
   };
@@ -689,12 +835,15 @@
     return cells;
   }
 
-  function caveMat(tex) {
-    return new THREE.MeshLambertMaterial({
+  function caveMat(tex, th) {
+    const p = (th && th.phong) || {};
+    return new THREE.MeshPhongMaterial({
       map: tex || null,
       color: 0xffffff,
       vertexColors: true,
       fog: true,
+      specular: p.specular != null ? p.specular : 0x111111,
+      shininess: p.shininess != null ? p.shininess : 2,
     });
   }
 
@@ -733,61 +882,73 @@
     clearMap();
     if (!map) return;
     const w = map.width, h = map.height;
+    const th = currentTheme || {};
+    const hasB = !!(th.floorTexB && th.wallTexB);
     const fb = new Builder();
+    const fbB = hasB ? new Builder() : null;
     const wb = new Builder();
-    const floorIdx = new Map();
-    const platIdx = new Map();
+    const wbB = hasB ? new Builder() : null;
+    const eb = (th.edge && th.edge.colors) ? new Builder() : null;
+    const floorIdxA = new Map();
+    const floorIdxB = new Map();
+    const platIdxA = new Map();
+    const platIdxB = new Map();
 
-    function getFloorVert(vi, vj) {
+    // low-frequency noise splits floor/wall tiles into organic A/B patches
+    function floorVar(x, y) { return hasB && fbm(x * 0.33 + 7.3, y * 0.33 + 2.9) > 0.6; }
+    function wallVar(x, y) { return hasB && fbm(x * 0.29 + 11.7, y * 0.29 + 5.1) > 0.62; }
+    function F(v) { return v ? fbB : fb; }
+    function W(v) { return v ? wbB : wb; }
+    function FI(v) { return v ? floorIdxB : floorIdxA; }
+    function PI(v) { return v ? platIdxB : platIdxA; }
+
+    function getFloorVert(vi, vj, varB) {
+      const idx = FI(varB);
       const k = vi + "," + vj;
-      if (floorIdx.has(k)) return floorIdx.get(k);
+      if (idx.has(k)) return idx.get(k);
       const x = wx(vi), z = wz(vj);
       const y = floorH(vi, vj, map);
-      const idx = fb.vert(x, y, z, x * UV_SCALE, z * UV_SCALE, { kind: "floor", cells: floorCellsAt(map, vi, vj) });
-      floorIdx.set(k, idx);
-      return idx;
+      const idxv = F(varB).vert(x, y, z, x * UV_SCALE, z * UV_SCALE, { kind: "floor", cells: floorCellsAt(map, vi, vj) });
+      idx.set(k, idxv);
+      return idxv;
     }
 
-    function getPlatVert(vi, vj) {
+    function getPlatVert(vi, vj, varB) {
+      const idx = PI(varB);
       const k = vi + "," + vj;
-      if (platIdx.has(k)) return platIdx.get(k);
+      if (idx.has(k)) return idx.get(k);
       const j = plateauJitter(map, vi, vj);
       const x = wx(vi) + j.x;
       const z = wz(vj) + j.z;
       const y = wallH(vi, vj);
-      const idx = wb.vert(x, y, z, x * UV_SCALE, z * UV_SCALE, { kind: "wall", cells: wallCellsAt(map, vi, vj) });
-      platIdx.set(k, idx);
-      return idx;
+      const idxv = W(varB).vert(x, y, z, x * UV_SCALE, z * UV_SCALE, { kind: "wall", cells: wallCellsAt(map, vi, vj) });
+      idx.set(k, idxv);
+      return idxv;
     }
 
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!isFloor(map, x, y)) continue;
-        const sw = getFloorVert(x, y);
-        const se = getFloorVert(x + 1, y);
-        const ne = getFloorVert(x + 1, y + 1);
-        const nw = getFloorVert(x, y + 1);
-        fb.quad(sw, nw, ne, se);
+        const vb = floorVar(x, y);
+        const sw = getFloorVert(x, y, vb);
+        const se = getFloorVert(x + 1, y, vb);
+        const ne = getFloorVert(x + 1, y + 1, vb);
+        const nw = getFloorVert(x, y + 1, vb);
+        F(vb).quad(sw, nw, ne, se);
       }
     }
 
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (map.tiles[y][x] !== MD.TILE.WALL) continue;
-        const sw = getPlatVert(x, y);
-        const se = getPlatVert(x + 1, y);
-        const ne = getPlatVert(x + 1, y + 1);
-        const nw = getPlatVert(x, y + 1);
-        const meta = { kind: "wall", cells: [{ x: x, y: y, room: false }] };
-        const psw = platPos(wb, sw), pse = platPos(wb, se), pne = platPos(wb, ne), pnw = platPos(wb, nw);
-        const cx = (psw.x + pse.x + pne.x + pnw.x) * 0.25 + (hash01(x, y) - 0.5) * 0.08;
-        const cz = (psw.z + pse.z + pne.z + pnw.z) * 0.25 + (hash01(x + 3, y) - 0.5) * 0.08;
-        const cy = (psw.y + pse.y + pne.y + pnw.y) * 0.25 + (hash01(x, y + 5) - 0.5) * 0.18;
-        const mid = wb.vert(cx, cy, cz, cx * UV_SCALE, cz * UV_SCALE, meta);
-        wb.tri(sw, nw, mid);
-        wb.tri(nw, ne, mid);
-        wb.tri(ne, se, mid);
-        wb.tri(se, sw, mid);
+        const vb = wallVar(x, y);
+        const sw = getPlatVert(x, y, vb);
+        const se = getPlatVert(x + 1, y, vb);
+        const ne = getPlatVert(x + 1, y + 1, vb);
+        const nw = getPlatVert(x, y + 1, vb);
+        // flat top over shared corner heights -> walls read as one continuous
+        // terrain instead of a grid of separate pyramids
+        W(vb).quad(sw, nw, ne, se);
       }
     }
 
@@ -795,20 +956,44 @@
       return { x: b.pos[i * 3], y: b.pos[i * 3 + 1], z: b.pos[i * 3 + 2] };
     }
 
-    function cliffBottom(vi, vj, wallX, wallY) {
+    function cliffBottom(vi, vj, wallX, wallY, varB) {
       const x = wx(vi);
       const z = wz(vj);
       const y = floorH(vi, vj, map) - 0.03;
       const meta = { kind: "wall", cells: inMap(map, wallX, wallY) ? [{ x: wallX, y: wallY, room: false }] : wallCellsAt(map, vi, vj) };
-      return wb.vert(x, y, z, x * UV_SCALE, y * UV_SCALE, meta);
+      return W(varB).vert(x, y, z, x * UV_SCALE, y * UV_SCALE, meta);
     }
 
     function addCliff(v0i, v0j, v1i, v1j, wallX, wallY) {
-      const top0 = getPlatVert(v0i, v0j);
-      const top1 = getPlatVert(v1i, v1j);
-      const bot0 = cliffBottom(v0i, v0j, wallX, wallY);
-      const bot1 = cliffBottom(v1i, v1j, wallX, wallY);
-      wb.quad(bot0, bot1, top1, top0);
+      const vb = wallVar(wallX, wallY);
+      const top0 = getPlatVert(v0i, v0j, vb);
+      const top1 = getPlatVert(v1i, v1j, vb);
+      const bot0 = cliffBottom(v0i, v0j, wallX, wallY, vb);
+      const bot1 = cliffBottom(v1i, v1j, wallX, wallY, vb);
+      W(vb).quad(bot0, bot1, top1, top0);
+      // trim strip hugging the cliff face base (theme edge / neon lines)
+      if (th.edge && eb) {
+        const pB0 = platPos(W(vb), bot0), pB1 = platPos(W(vb), bot1);
+        const pT0 = platPos(W(vb), top0), pT1 = platPos(W(vb), top1);
+        const t0 = 0.06, t1 = 0.4;
+        const f = th.edge.colors[Math.floor(hash01(wallX * 5, wallY * 11) * th.edge.colors.length) % th.edge.colors.length];
+        const col = new THREE.Color(f);
+        const jit = 0.85 + hash01(wallX + 2, wallY + 9) * 0.3;
+        const cA = [Math.min(1, col.r * jit), Math.min(1, col.g * jit), Math.min(1, col.b * jit)];
+        const s0 = eb.vert(
+          pB0.x + (pT0.x - pB0.x) * t0, pB0.y + (pT0.y - pB0.y) * t0, pB0.z + (pT0.z - pB0.z) * t0,
+          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
+        const s1 = eb.vert(
+          pB1.x + (pT1.x - pB1.x) * t0, pB1.y + (pT1.y - pB1.y) * t0, pB1.z + (pT1.z - pB1.z) * t0,
+          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
+        const s2 = eb.vert(
+          pB1.x + (pT1.x - pB1.x) * t1, pB1.y + (pT1.y - pB1.y) * t1, pB1.z + (pT1.z - pB1.z) * t1,
+          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
+        const s3 = eb.vert(
+          pB0.x + (pT0.x - pB0.x) * t1, pB0.y + (pT0.y - pB0.y) * t1, pB0.z + (pT0.z - pB0.z) * t1,
+          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
+        eb.quad(s0, s3, s2, s1);
+      }
     }
 
     for (let y = 0; y < h; y++) {
@@ -822,14 +1007,15 @@
     }
 
     function addSkirt(v0i, v0j, v1i, v1j, wallX, wallY) {
-      const top0 = getPlatVert(v0i, v0j);
-      const top1 = getPlatVert(v1i, v1j);
+      const vb = wallVar(wallX, wallY);
+      const top0 = getPlatVert(v0i, v0j, vb);
+      const top1 = getPlatVert(v1i, v1j, vb);
       const meta = { kind: "wall", cells: inMap(map, wallX, wallY) ? [{ x: wallX, y: wallY, room: false }] : [] };
-      const p0 = platPos(wb, top0);
-      const p1 = platPos(wb, top1);
-      const b0 = wb.vert(p0.x, -0.28, p0.z, p0.x * UV_SCALE, 0, meta);
-      const b1 = wb.vert(p1.x, -0.28, p1.z, p1.x * UV_SCALE, 0, meta);
-      wb.quad(b0, b1, top1, top0);
+      const p0 = platPos(W(vb), top0);
+      const p1 = platPos(W(vb), top1);
+      const b0 = W(vb).vert(p0.x, -0.28, p0.z, p0.x * UV_SCALE, 0, meta);
+      const b1 = W(vb).vert(p1.x, -0.28, p1.z, p1.x * UV_SCALE, 0, meta);
+      W(vb).quad(b0, b1, top1, top0);
     }
 
     for (let y = 0; y < h; y++) {
@@ -855,24 +1041,44 @@
           const n = hash01(x * 3 + dx, y * 5 + dy);
           if (!(longWall && n > 0.62) && n < 0.84) continue;
           const meta = { kind: "wall", cells: [{ x: wx_, y: wy_, room: false }] };
+          const lvb = wallVar(wx_, wy_);
           const lx = x + dx * (0.52 + hash01(x, wy_) * 0.18);
           const lz = y + dy * (0.52 + hash01(wy_, x) * 0.18);
           const ly = 0.18 + hash01(x + wy_, 2) * 0.35;
-          addRockLump(wb, lx, ly, lz, x * 17 + y * 13 + d, meta);
-          if (n > 0.9) addBoxLump(wb, lx + (hash01(d, x) - 0.5) * 0.16, ly * 0.7, lz + (hash01(y, d) - 0.5) * 0.16, x + y + d, meta);
+          addRockLump(W(lvb), lx, ly, lz, x * 17 + y * 13 + d, meta);
+          if (n > 0.9) addBoxLump(W(lvb), lx + (hash01(d, x) - 0.5) * 0.16, ly * 0.7, lz + (hash01(y, d) - 0.5) * 0.16, x + y + d, meta);
         }
       }
     }
 
     if (fb.idx.length) {
-      floorMesh = fb.toMesh(caveMat(dirtTex));
+      floorMesh = fb.toMesh(caveMat(dirtTex, th));
       scene.add(floorMesh);
       floorMeta = fb.meta;
     }
+    if (fbB && fbB.idx.length) {
+      floorMeshB = fbB.toMesh(caveMat(dirtTexB, th));
+      scene.add(floorMeshB);
+      floorMetaB = fbB.meta;
+    }
     if (wb.idx.length) {
-      wallMesh = wb.toMesh(caveMat(rockTex));
+      wallMesh = wb.toMesh(caveMat(rockTex, th));
       scene.add(wallMesh);
       wallMeta = wb.meta;
+    }
+    if (wbB && wbB.idx.length) {
+      wallMeshB = wbB.toMesh(caveMat(rockTexB, th));
+      scene.add(wallMeshB);
+      wallMetaB = wbB.meta;
+    }
+    if (eb && eb.idx.length) {
+      edgeMesh = eb.toMesh(new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        fog: true,
+        transparent: true,
+        opacity: 0.95,
+      }));
+      scene.add(edgeMesh);
     }
 
     buildStairsDecor(map);
@@ -1054,6 +1260,8 @@
     lastVisSig = sig;
     paintMeshColors(floorMesh, floorMeta, state);
     paintMeshColors(wallMesh, wallMeta, state);
+    paintMeshColors(floorMeshB, floorMetaB, state);
+    paintMeshColors(wallMeshB, wallMetaB, state);
     if (map.stairs) {
       const v = visOf(state, map.stairs.x, map.stairs.y);
       stairsRoot.visible = v.seen;
@@ -1438,6 +1646,7 @@
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.12;
     scene.add(ground);
+    groundMesh = ground;
 
     actorRoot = new THREE.Group();
     itemRoot = new THREE.Group();
@@ -1491,6 +1700,7 @@
       lookCurrent.set(0, 0, 0);
       applyOrbit();
       if (playerLight) playerLight.intensity = 0;
+      hideFx();
       return;
     }
     if (state.map !== lastMap) {
@@ -1511,6 +1721,8 @@
     updateItems(state, now);
     updateDecos(state);
     updateCamera(state, now);
+    if (state.player) updateFx(now, state.player.x * S, state.player.y * S);
+    else hideFx();
   }
 
   function render() {

@@ -1951,5 +1951,25 @@
       updateUI();
       return true;
     };
+
+    // 主题预览面板：?debug=1 时出现在左下角，点按钮直接跳到对应主题首层
+    const panel = document.createElement("div");
+    panel.id = "debugPanel";
+    const mkBtn = function (label, fn, cls) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = cls || "dbg-btn";
+      b.textContent = label;
+      b.addEventListener("click", fn);
+      panel.appendChild(b);
+    };
+    MD.THEMES.forEach(function (t, i) {
+      mkBtn(t.name, function () { MD.debugFloor(i * MD.FLOORS_PER_THEME + 1); });
+    });
+    panel.appendChild(document.createElement("br"));
+    mkBtn("← 上一层", function () { MD.debugFloor(state.floor - 1); }, "dbg-btn dbg-small");
+    mkBtn("下一层 →", function () { MD.debugFloor(state.floor + 1); }, "dbg-btn dbg-small");
+    const host = document.querySelector(".board-wrap");
+    if (host) host.appendChild(panel);
   }
 })();
