@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" fill="none">
+<title>纸片小镇装饰底图</title>
+<defs>
+  <pattern id="grain" width="23" height="19" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r=".6" fill="#8b805b" opacity=".13"/><circle cx="16" cy="13" r=".7" fill="#fffdf3" opacity=".8"/><path d="M7 15h3m8-12h2" stroke="#8b805b" stroke-width=".5" opacity=".1"/></pattern>
+  <pattern id="meadow" width="80" height="68" patternUnits="userSpaceOnUse"><path d="m10 34-2-6m2 6 4-4M62 57l-3-6m3 6 3-5" fill="none" stroke="#a3b89a" stroke-width="2" stroke-linecap="round" opacity=".5"/><circle cx="49" cy="20" r="2" fill="#f6ce84" opacity=".7"/></pattern>
+  <symbol id="tree" viewBox="0 0 130 180"><path d="m65 102-5 74h13l-4-74" fill="#ad8f6b"/><path d="m25 93 10 34 34 16 35-23 9-29-17-29-2-32-30-25-30 16-9 34-20 20z" fill="#a9bea5"/><path d="m66 11 1 126 30-19 11-25-17-29-2-31z" fill="#91ad92"/><path d="m43 111 22 17 19-27M65 128V69" stroke="#708f7a" stroke-width="2" opacity=".55" fill="none"/><path d="m28 95 5 17m52-77 4 8" stroke="#d7dfbd" stroke-width="5" stroke-linecap="round"/></symbol>
+  <symbol id="spruce" viewBox="0 0 105 170"><path d="M46 120v47h13v-47" fill="#b09677"/><path d="M54 1 19 55h14L6 101h19L0 142l53 13 51-13-25-41h17L69 55h16z" fill="#7d9f91"/><path d="M54 1v153l50-12-25-41h17L69 55h16z" fill="#709284"/><path d="m34 58 8-2m-12 49 14-3m-20 38 20 3" stroke="#b6c8a6" stroke-width="3" fill="none" stroke-linecap="round"/></symbol>
+  <symbol id="house" viewBox="0 0 230 200"><path d="m35 86 2 108 157-3-3-110" fill="#e4c9a3"/><path d="M41 94h146v94H42z" fill="#f1dbb8"/><path d="m10 90 103-81 104 79-9 13-93-62-94 63z" fill="#bd8180"/><path d="M20 92 112 21l96 71" fill="none" stroke="#a96f72" stroke-width="3"/><path d="m56 65 104 1M77 48h62" stroke="#d6a29a" stroke-width="3"/><path d="M130 148c0-34 44-35 44 0v43h-44z" fill="#baa17d"/><path d="M139 149c0-21 26-21 26 0v40h-26z" fill="#8d8b78"/><circle cx="157" cy="166" r="3" fill="#e8ce9f"/><rect x="62" y="115" width="42" height="40" rx="18" fill="#98b9b3" stroke="#c9ae85" stroke-width="5"/><path d="M82 97v75m-24-36h49" stroke="#f4e4c3" stroke-width="4"/><path d="M48 159h62v10H48z" fill="#bc9776"/><path d="M53 162c-2-17 11-18 14-7 4-23 20-22 22-4 6-13 17-8 15 11" fill="#95af87"/><path d="M174 25V5h20v37" fill="#c9aa93"/></symbol>
+  <symbol id="roofBlue" viewBox="0 0 230 200"><use href="#house"/><path d="m10 90 103-81 104 79-9 13-93-62-94 63z" fill="#8babb6"/><path d="M20 92 112 21l96 71m-149-6 105-1M77 48h62" fill="none" stroke="#6d96a4" stroke-width="3"/></symbol>
+  <symbol id="flowers" viewBox="0 0 95 54"><path d="M11 49c-15-24 10-30 17-9C19 8 47 8 46 32 53 4 79 22 61 43 81 17 98 39 81 50z" fill="#b1bf96"/><g fill="#d99b98"><circle cx="25" cy="33" r="6"/><circle cx="31" cy="26" r="6"/><circle cx="38" cy="33" r="6"/></g><circle cx="31" cy="33" r="4" fill="#f7d99b"/><g fill="#eee0b4"><circle cx="59" cy="31" r="5"/><circle cx="66" cy="27" r="5"/><circle cx="70" cy="34" r="5"/></g><circle cx="65" cy="33" r="3" fill="#d7ad78"/></symbol>
+  <symbol id="cloud" viewBox="0 0 200 70"><path d="M10 63C-5 29 41 18 54 35 52-2 110-8 118 29c33-20 76 0 73 31z" fill="#f4f0df" opacity=".65"/></symbol>
+  <symbol id="stone" viewBox="0 0 60 25"><path d="m3 17 8-11 18-5 22 7 7 11-20 5-29-2z" fill="#c4c2ac"/><path d="m10 15 15-6 21 4" fill="none" stroke="#d9d5bd" stroke-width="3"/></symbol>
+</defs>
+
+<rect width="1200" height="660" rx="25" fill="#f2e8cb"/>
+<path d="M0 30 185 9l127 24L494 6l182 32L863 8l193 24L1200 6v163H0z" fill="#d8e2c8"/>
+<path d="M0 118 95 81l163 35L378 65l141 52 141-51 161 58 171-44 208 51v77H0z" fill="#bccdb5"/>
+<use href="#cloud" x="140" y="20" width="165" height="58"/><use href="#cloud" x="870" y="23" width="180" height="58"/>
+<path d="m0 182 103-11 147 38 119-13 142 32 118-39 181 22 138-32 137 25 115-34v490H0z" fill="#e0e1b9"/>
+<path d="M0 300q180-103 329-19t326-3 292 3 253-26v405H0z" fill="#ece5c1"/>
+<path d="M0 485q88-89 215-55t225 70 311-8 238-30 211 39v159H0z" fill="#d9dcb2"/>
+<path d="M604 90q-18 111-9 167T422 366 239 302M599 286q55 2 123 48t179-61M470 356q107 26 139 106t-6 166M605 462q-162-5-217 50t-207 18M605 478q144-74 226-27t158 62" fill="none" stroke="#cebd96" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M604 90q-18 111-9 167T422 366 239 302M599 286q55 2 123 48t179-61M470 356q107 26 139 106t-6 166M605 462q-162-5-217 50t-207 18M605 478q144-74 226-27t158 62" fill="none" stroke="#f8edce" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M604 175q-9 107-89 145m-128 50-87-36m433 2 100-30M589 416l15 33m-68 31-91 15m295-27 81 0" fill="none" stroke="#cdb98d" stroke-width="2.5" stroke-dasharray="4 12" stroke-linecap="round"/>
+<path d="M31 338c30-34 96-41 127-20s68 47 46 82-44 29-79 31-78 2-99-25 0-40 5-68z" fill="#b9c7a6"/><path d="M37 343c22-30 90-32 115-15s68 40 41 68-57 18-79 28-71-5-82-23 0-42 5-58z" fill="#a5ccd0"/><path d="M45 365h61m-46 32h34m18-50h46m-22 44h27" stroke="#d4e3db" stroke-width="4" stroke-linecap="round"/><path d="m37 414 24 8m86-97 20 11" stroke="#839e93" stroke-width="3"/>
+<use href="#house" x="45" y="107" width="198" height="173"/><use href="#roofBlue" x="938" y="116" width="204" height="178"/>
+<use href="#tree" x="341" y="94" width="92" height="129"/><use href="#tree" x="748" y="86" width="95" height="133"/>
+<use href="#spruce" x="3" y="58" width="85" height="141"/><use href="#spruce" x="1126" y="54" width="73" height="124"/>
+<use href="#flowers" x="57" y="260" width="90" height="48"/><use href="#flowers" x="1027" y="285" width="95" height="54"/>
+<use href="#flowers" x="374" y="522" width="102" height="58"/><use href="#flowers" x="773" y="540" width="91" height="50"/>
+<use href="#stone" x="746" y="229" width="46" height="20"/><use href="#stone" x="364" y="425" width="43" height="18"/>
+<path d="M0 604c40-37 78-46 102-10 16-41 67-32 77 14 34-39 83-12 87 35l36 17H0zm913 56c-2-38 48-64 77-30 10-53 58-60 79-19 23-47 81-41 92 0 19-32 39-36 39-36v85z" fill="#afc29e"/>
+<use href="#flowers" x="52" y="575" width="105" height="60"/><use href="#flowers" x="1090" y="579" width="100" height="58"/>
+<rect y="209" width="1200" height="451" fill="url(#meadow)" opacity=".55"/><rect width="1200" height="660" fill="url(#grain)"/>
+
+</svg>

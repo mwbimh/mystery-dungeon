@@ -235,8 +235,9 @@ test('v2 per-dungeon rules control hunger, regeneration and warning thresholds',
 test('v2 town inventory actions cannot consume items or create stale aiming state', () => {
   const h = harness();
   const pear = h.inventoryItem('pear');
-  h.get('invActions').children[0].onclick();
-  h.get('invActions').children[1].onclick();
+  assert.equal(h.get('invActions').children.length, 1);
+  assert.match(h.get('invActions').children[0].textContent, /迷宫内使用/);
+  assert.equal(typeof h.get('invActions').children[0].onclick, 'undefined');
   assert.equal(h.state.bag[0], pear);
   assert.equal(h.state.aiming, null);
   assert.equal(h.state.player, null);

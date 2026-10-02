@@ -9,7 +9,7 @@
   const status = document.getElementById('saveStatus');
   const store = MDSaves.createStore({ config: MD.config });
   let activeSlot = null, revision = 0, saveTimer = null, dirty = false;
-  let lastSignature = '', saveChain = Promise.resolve(), busy = false, page = 'main';
+  let lastSignature = '', queuedSignature = '', saveChain = Promise.resolve(), busy = false, page = 'main';
   let persistenceBlocked = false, settingsError = '', importing = null, pendingWrites = 0;
   const settings = MD.settings;
   const $ = id => document.getElementById(id);
@@ -42,9 +42,14 @@
     if (!MD.session.isStable()) { scheduleSave(); return; }
     if (persistenceBlocked) throw new Error('存档发生冲突或写入失败。请先下载当前进度，再重新载入存档位；不会覆盖另一标签页的新进度。');
     const slot = activeSlot, snapshot = MD.session.snapshot(), sig = signature(snapshot);
-    if (!force && !dirty && sig === lastSignature) return;
-    if (sig === lastSignature) { dirty = false; return; }
-    dirty = false;
+    // Compare against the queue tail, not only the last completed write.
+    // A → B (pending) → A must enqueue A after B instead of losing the undo.
+    if (sig === (pendingWrites ? queuedSignature : lastSignature)) {
+      if (!pendingWrites) dirty = false;
+      return;
+    }
+    queuedSignature = sig;
+    dirty = true;
     // Capture before queuing. Every queued write checks its slot and uses the
     // revision produced by its predecessor, not a stale timestamp from the UI.
     const work = async () => {
@@ -62,10 +67,24 @@
       }
     };
     pendingWrites++;
-    const result = saveChain.then(work, work).finally(() => { pendingWrites--; }); saveChain = result.catch(() => {}); return result;
+    const result = saveChain.then(work, work).finally(() => {
+      pendingWrites--;
+      if (!pendingWrites && slot === activeSlot && !persistenceBlocked) {
+        // Changes can arrive while IndexedDB is writing. Never mark a newer
+        // in-memory state durable merely because an older transaction finished.
+        dirty = !MD.session.isStable() || signature(MD.session.snapshot()) !== lastSignature;
+      }
+    }); saveChain = result.catch(() => {}); return result;
   }
   async function settle() { await MD.session.pause(); if (saveTimer) clearTimeout(saveTimer); saveTimer = null; await saveChain; if (activeSlot && !persistenceBlocked) await save(true); }
-  async function open() { await settle(); showShell(); await renderMain(); }
+  async function open() {
+    // Keep recovery reachable even if the flush fails after the game pauses.
+    showShell();
+    let saveError;
+    try { await settle(); } catch (error) { saveError = error; }
+    await renderMain();
+    if (saveError) message('保存失败：' + saveError.message + '。当前进度仍在内存，请下载备份。', true);
+  }
   function downloadText(text, filename) {
     const blob = new Blob([text], { type: 'application/json' }); const url = URL.createObjectURL(blob);
     const a = el('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -78,13 +97,15 @@
   }
   async function renderMain() {
     page = 'main'; heading('迷宫', '有些路，值得再走一次。');
-    const rows = await store.list();
+    let rows = [], listUnavailable = false;
+    try { rows = await store.list(); }
+    catch (error) { listUnavailable = true; message('无法读取存档列表：' + error.message + (activeSlot ? '。当前旅程仍在内存，可以下载备份或回到旅程。' : '。请刷新后重试。'), true); }
     const latest = rows.filter(r => r.status === 'ready').sort((a, b) => (b.metadata.updatedAt || 0) - (a.metadata.updatedAt || 0) || a.slotId - b.slotId)[0];
     const actions = el('div', null, 'menu-main-actions');
     if (activeSlot) { const resume = button('回到旅程', () => closeShell()); resume.id = 'menuResume'; actions.appendChild(resume); }
     const next = button('继续', () => load(latest.slotId)); next.id = 'menuContinue'; next.disabled = !latest;
-    const newGame = button('新游戏', () => renderSlots('new')); newGame.id = 'menuNew';
-    const loadGame = button('读取存档', () => renderSlots('load')); loadGame.id = 'menuLoad';
+    const newGame = button('新游戏', () => renderSlots('new')); newGame.id = 'menuNew'; newGame.disabled = listUnavailable;
+    const loadGame = button('读取存档', () => renderSlots('load')); loadGame.id = 'menuLoad'; loadGame.disabled = listUnavailable;
     const prefs = button('设置', renderSettings); prefs.id = 'menuSettings';
     const about = button('关于', renderAbout); about.id = 'menuAbout';
     actions.append(newGame, next, loadGame, prefs, about); content.appendChild(actions);
@@ -103,7 +124,13 @@
   }
   async function renderSlots(mode) {
     page = mode; heading(mode === 'new' ? '选择新的起点' : '旅程档案', '10 个独立存档位 · 每次稳定行动自动保存 · 每槽保留上一版恢复点');
-    const rows = await store.list(); const grid = el('div', null, 'save-grid');
+    let rows;
+    try { rows = await store.list(); } catch (error) {
+      message('无法读取存档列表：' + error.message + '。可以返回菜单或下载当前进度。', true);
+      if (activeSlot) content.appendChild(button('下载当前进度', exportCurrent));
+      back(); return;
+    }
+    const grid = el('div', null, 'save-grid');
     for (const row of rows) {
       const card = el('article', null, 'save-card'); card.dataset.slot = row.slotId;
       card.appendChild(el('h2', '存档 ' + String(row.slotId).padStart(2, '0') + (row.slotId === activeSlot ? ' · 当前' : '')));
@@ -213,7 +240,8 @@
   }));
   $('btnSessionMenu').onclick = () => perform(open);
   document.addEventListener('keydown', event => {
-    if (root.hidden) { if (event.key === 'Escape' && !MD_STATE.invOpen && !MD_STATE.aiming && !MD_STATE.skillAiming && $('helpOverlay').classList.contains('hidden') && $('endOverlay').classList.contains('hidden')) { event.preventDefault(); perform(open); } return; }
+    if (event.defaultPrevented) return;
+    if (root.hidden) { if (event.key === 'Escape' && !(MD.dialogue && MD.dialogue.isOpen()) && !MD_STATE.invOpen && !MD_STATE.aiming && !MD_STATE.skillAiming && $('helpOverlay').classList.contains('hidden') && $('endOverlay').classList.contains('hidden')) { event.preventDefault(); perform(open); } return; }
     if (event.key === 'Escape' && !busy) { event.preventDefault(); if (page !== 'main') perform(renderMain); else if (activeSlot) closeShell(); }
     if (event.key === 'Tab') { const nodes = [...root.querySelectorAll('button:not(:disabled),a[href],input,select')].filter(n => !n.hidden); const first = nodes[0], last = nodes[nodes.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
   });

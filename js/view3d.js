@@ -47,6 +47,9 @@
   let floorMeshB = null;
   let wallMeshB = null;
   let edgeMesh = null;
+  let paperDetailMesh = null;
+  let paperDetailMeta = [];
+  let edgeMeta = [];
   let floorMeta = [];
   let wallMeta = [];
   let floorMetaB = [];
@@ -138,25 +141,48 @@
     }
   }
 
-  let fxDotTexture = null;
+  const fxTextures = Object.create(null);
   let fxLayers = [];
   let fxLastT = 0;
   let groundMesh = null;
 
-  function fxDot() {
-    if (fxDotTexture) return fxDotTexture;
+  function reducedMotion() {
+    return !!(MD.settings && MD.settings.reducedMotion);
+  }
+
+  function paperStyle() {
+    return MD.paperTerrain ? MD.paperTerrain.style(currentTheme) : { rim: 0xfff0d6, ink: 0x62576b, accent: 0xb29abd, fleck: 0xe7d0a1 };
+  }
+
+  function fxStamp(shape) {
+    if (fxTextures[shape]) return fxTextures[shape];
     const c = document.createElement("canvas");
-    c.width = 64;
-    c.height = 64;
+    c.width = c.height = 64;
     const g = c.getContext("2d");
-    const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(0.45, "rgba(255,255,255,0.6)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 64, 64);
-    fxDotTexture = new THREE.CanvasTexture(c);
-    return fxDotTexture;
+    g.fillStyle = "#fff";
+    g.strokeStyle = "rgba(255,255,255,0.85)";
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    if (shape === "leaf") {
+      g.beginPath(); g.moveTo(12, 44); g.quadraticCurveTo(9, 13, 48, 13);
+      g.quadraticCurveTo(52, 39, 12, 44); g.fill();
+      g.globalCompositeOperation = "destination-out";
+      g.lineWidth = 2; g.beginPath(); g.moveTo(17, 39); g.lineTo(40, 20); g.stroke();
+    } else if (shape === "rain") {
+      g.lineWidth = 3; g.beginPath(); g.moveTo(34, 12); g.lineTo(29, 49); g.stroke();
+    } else if (shape === "spark") {
+      g.beginPath(); g.moveTo(32, 7); g.lineTo(38, 26); g.lineTo(54, 32);
+      g.lineTo(38, 38); g.lineTo(32, 57); g.lineTo(26, 38); g.lineTo(10, 32);
+      g.lineTo(26, 26); g.closePath(); g.fill();
+    } else {
+      const grad = g.createRadialGradient(32, 32, 2, 32, 32, 28);
+      grad.addColorStop(0, "rgba(255,255,255,0.8)");
+      grad.addColorStop(0.5, "rgba(255,255,255,0.3)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    }
+    fxTextures[shape] = new THREE.CanvasTexture(c);
+    return fxTextures[shape];
   }
 
   function clearFx() {
@@ -172,7 +198,8 @@
     clearFx();
     const list = (theme && theme.fx) || [];
     for (const cfg of list) {
-      const N = cfg.count;
+      const compact = global.innerWidth && global.innerWidth < 700;
+      const N = Math.min(cfg.count, compact ? 24 : 48);
       const colors = cfg.colors.map(function (c) { return new THREE.Color(c); });
       const pos = new Float32Array(N * 3);
       const col = new Float32Array(N * 3);
@@ -190,7 +217,7 @@
       geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
       const mat = new THREE.PointsMaterial({
         size: cfg.size,
-        map: fxDot(),
+        map: fxStamp(cfg.shape || "mote"),
         vertexColors: true,
         transparent: true,
         opacity: cfg.opacity,
@@ -202,6 +229,7 @@
       const points = new THREE.Points(geo, mat);
       points.frustumCulled = false;
       const group = new THREE.Group();
+      group.name = "dungeon-air";
       group.add(points);
       group.visible = false;
       scene.add(group);
@@ -210,6 +238,7 @@
   }
 
   function updateFx(now, cx, cz) {
+    if (reducedMotion()) { fxLastT = now; hideFx(); return; }
     const dt = Math.min(0.05, (now - fxLastT) / 1000 || 0.016);
     fxLastT = now;
     const t = now / 1000;
@@ -224,6 +253,9 @@
         if (L.cfg.fall < 0 && y > L.cfg.height) y = 0.06;
         pos[i * 3 + 1] = y;
         pos[i * 3] += Math.sin(t * 0.8 + L.seeds[i]) * L.cfg.sway * dt;
+        const half = L.cfg.spread * 0.5;
+        if (pos[i * 3] > half) pos[i * 3] = -half;
+        else if (pos[i * 3] < -half) pos[i * 3] = half;
       }
       L.geo.attributes.position.needsUpdate = true;
     }
@@ -534,7 +566,7 @@
     const img = MD.sprites && MD.sprites.playerImage && MD.sprites.playerImage(anim);
     if (!img || !img.naturalWidth) return;
     const col = cameraRelativeCol(actor);
-    const row = playerFrameIndex(anim, actor, now);
+    const row = reducedMotion() ? 0 : playerFrameIndex(anim, actor, now);
     const key = anim + ":" + col + ":" + row;
     if (paper.userData.atlasKey === key) return;
     paper.userData.atlasKey = key;
@@ -637,6 +669,7 @@
       group.remove(group.userData.paper);
       if (group.userData.paper.geometry) group.userData.paper.geometry.dispose();
       if (group.userData.paper.userData && group.userData.paper.userData.playerAtlas && group.userData.paper.material) {
+        if (group.userData.paper.userData.atlasTex) group.userData.paper.userData.atlasTex.dispose();
         group.userData.paper.material.dispose();
       }
       group.userData.paper = null;
@@ -670,8 +703,11 @@
     disposeMesh(floorMeshB);
     disposeMesh(wallMeshB);
     disposeMesh(edgeMesh);
+    disposeMesh(paperDetailMesh);
     floorMesh = wallMesh = null;
-    floorMeshB = wallMeshB = edgeMesh = null;
+    floorMeshB = wallMeshB = edgeMesh = paperDetailMesh = null;
+    paperDetailMeta = [];
+    edgeMeta = [];
     floorMeta = [];
     wallMeta = [];
     floorMetaB = [];
@@ -889,6 +925,8 @@
     const wb = new Builder();
     const wbB = hasB ? new Builder() : null;
     const eb = (th.edge && th.edge.colors) ? new Builder() : null;
+    const pb = new Builder();
+    const art = paperStyle();
     const floorIdxA = new Map();
     const floorIdxB = new Map();
     const platIdxA = new Map();
@@ -956,53 +994,75 @@
       return { x: b.pos[i * 3], y: b.pos[i * 3 + 1], z: b.pos[i * 3 + 2] };
     }
 
-    function cliffBottom(vi, vj, wallX, wallY, varB) {
-      const x = wx(vi);
-      const z = wz(vj);
-      const y = floorH(vi, vj, map) - 0.03;
-      const meta = { kind: "wall", cells: inMap(map, wallX, wallY) ? [{ x: wallX, y: wallY, room: false }] : wallCellsAt(map, vi, vj) };
-      return W(varB).vert(x, y, z, x * UV_SCALE, y * UV_SCALE, meta);
+    function paperQuad(points, color, cells, tone) {
+      const meta = { kind: "paper", cells: cells, paperColor: new THREE.Color(color), tone: tone == null ? 1 : tone };
+      const idx = points.map(p => pb.vert(p.x, p.y, p.z, 0, 0, meta));
+      pb.quad(idx[0], idx[1], idx[2], idx[3]);
     }
 
-    function addCliff(v0i, v0j, v1i, v1j, wallX, wallY) {
+    function addCliff(v0i, v0j, v1i, v1j, wallX, wallY, floorX, floorY) {
       const vb = wallVar(wallX, wallY);
-      const top0 = getPlatVert(v0i, v0j, vb);
-      const top1 = getPlatVert(v1i, v1j, vb);
-      const bot0 = cliffBottom(v0i, v0j, wallX, wallY, vb);
-      const bot1 = cliffBottom(v1i, v1j, wallX, wallY, vb);
-      W(vb).quad(bot0, bot1, top1, top0);
-      // trim strip hugging the cliff face base (theme edge / neon lines)
+      const builder = W(vb);
+      const top0 = platPos(builder, getPlatVert(v0i, v0j, vb));
+      const top1 = platPos(builder, getPlatVert(v1i, v1j, vb));
+      const bottom0 = { x: wx(v0i), y: floorH(v0i, v0j, map) - 0.025, z: wz(v0j) };
+      const bottom1 = { x: wx(v1i), y: floorH(v1i, v1j, map) - 0.025, z: wz(v1j) };
+      const nx = -(v1j - v0j), nz = v1i - v0i;
+      const cells = [{ x: wallX, y: wallY, room: false }];
+      const floorCells = [{ x: floorX, y: floorY, room: isRoom(map, floorX, floorY) }];
+      const levels = [0, 0.43, 0.9, 1];
+      function lerp(bottom, top, t) {
+        const bevel = t === 0.9 ? 0.018 : 0;
+        return { x: bottom.x + (top.x - bottom.x) * t + nx * bevel,
+          y: bottom.y + (top.y - bottom.y) * t,
+          z: bottom.z + (top.z - bottom.z) * t + nz * bevel };
+      }
+      // Separate side vertices prevent the top normals from rounding the cut.
+      // Face-space UVs fix the old stretched texture on north/south vs east/west walls.
+      for (let row = 0; row < levels.length - 1; row++) {
+        const lo = levels[row], hi = levels[row + 1];
+        const q = [lerp(bottom0, top0, lo), lerp(bottom1, top1, lo), lerp(bottom1, top1, hi), lerp(bottom0, top0, hi)];
+        const shade = [0.72, 0.88, 1.04][row];
+        const meta = { kind: "wall", cells: cells, tone: shade };
+        const ids = q.map((p, i) => builder.vert(p.x, p.y, p.z,
+          ((v1i !== v0i) ? p.x : p.z) * UV_SCALE, p.y * UV_SCALE, meta));
+        builder.quad(ids[0], ids[1], ids[2], ids[3]);
+      }
+      // A narrow cream paper cut at the top, with a darker laminated underside.
+      const inset = 0.055;
+      paperQuad([
+        { x: top0.x, y: top0.y + 0.009, z: top0.z },
+        { x: top1.x, y: top1.y + 0.009, z: top1.z },
+        { x: top1.x - nx * inset, y: top1.y + 0.012, z: top1.z - nz * inset },
+        { x: top0.x - nx * inset, y: top0.y + 0.012, z: top0.z - nz * inset },
+      ], art.rim, cells, 0.86);
+      const side0 = lerp(bottom0, top0, 0.87), side1 = lerp(bottom1, top1, 0.87);
+      const side2 = lerp(bottom1, top1, 0.895), side3 = lerp(bottom0, top0, 0.895);
+      for (const p of [side0, side1, side2, side3]) { p.x += nx * 0.008; p.z += nz * 0.008; }
+      paperQuad([side0, side1, side2, side3], art.ink, cells, 0.7);
+      // Contact shadow is confined to the wall edge, leaving the playable centre clear.
+      paperQuad([
+        { x: bottom0.x, y: bottom0.y + 0.036, z: bottom0.z },
+        { x: bottom1.x, y: bottom1.y + 0.036, z: bottom1.z },
+        { x: bottom1.x + nx * 0.10, y: bottom1.y + 0.038, z: bottom1.z + nz * 0.10 },
+        { x: bottom0.x + nx * 0.10, y: bottom0.y + 0.038, z: bottom0.z + nz * 0.10 },
+      ], art.ink, floorCells, 0.62);
       if (th.edge && eb) {
-        const pB0 = platPos(W(vb), bot0), pB1 = platPos(W(vb), bot1);
-        const pT0 = platPos(W(vb), top0), pT1 = platPos(W(vb), top1);
-        const t0 = 0.06, t1 = 0.4;
-        const f = th.edge.colors[Math.floor(hash01(wallX * 5, wallY * 11) * th.edge.colors.length) % th.edge.colors.length];
-        const col = new THREE.Color(f);
-        const jit = 0.85 + hash01(wallX + 2, wallY + 9) * 0.3;
-        const cA = [Math.min(1, col.r * jit), Math.min(1, col.g * jit), Math.min(1, col.b * jit)];
-        const s0 = eb.vert(
-          pB0.x + (pT0.x - pB0.x) * t0, pB0.y + (pT0.y - pB0.y) * t0, pB0.z + (pT0.z - pB0.z) * t0,
-          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
-        const s1 = eb.vert(
-          pB1.x + (pT1.x - pB1.x) * t0, pB1.y + (pT1.y - pB1.y) * t0, pB1.z + (pT1.z - pB1.z) * t0,
-          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
-        const s2 = eb.vert(
-          pB1.x + (pT1.x - pB1.x) * t1, pB1.y + (pT1.y - pB1.y) * t1, pB1.z + (pT1.z - pB1.z) * t1,
-          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
-        const s3 = eb.vert(
-          pB0.x + (pT0.x - pB0.x) * t1, pB0.y + (pT0.y - pB0.y) * t1, pB0.z + (pT0.z - pB0.z) * t1,
-          0, 0, { kind: "wall", cells: [{ x: wallX, y: wallY, room: false }] }, cA);
-        eb.quad(s0, s3, s2, s1);
+        const color = new THREE.Color(th.edge.colors[Math.floor(hash01(wallX * 5, wallY * 11) * th.edge.colors.length) % th.edge.colors.length]);
+        const meta = { kind: "paper", cells: cells, paperColor: color };
+        const q = [lerp(bottom0, top0, 0.08), lerp(bottom1, top1, 0.08), lerp(bottom1, top1, 0.13), lerp(bottom0, top0, 0.13)];
+        const ids = q.map(p => eb.vert(p.x + nx * 0.01, p.y, p.z + nz * 0.01, 0, 0, meta));
+        eb.quad(ids[0], ids[1], ids[2], ids[3]);
       }
     }
 
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!isFloor(map, x, y)) continue;
-        if (isWall(map, x, y - 1)) addCliff(x, y, x + 1, y, x, y - 1);
-        if (isWall(map, x + 1, y)) addCliff(x + 1, y, x + 1, y + 1, x + 1, y);
-        if (isWall(map, x, y + 1)) addCliff(x + 1, y + 1, x, y + 1, x, y + 1);
-        if (isWall(map, x - 1, y)) addCliff(x, y + 1, x, y, x - 1, y);
+        if (isWall(map, x, y - 1)) addCliff(x, y, x + 1, y, x, y - 1, x, y);
+        if (isWall(map, x + 1, y)) addCliff(x + 1, y, x + 1, y + 1, x + 1, y, x, y);
+        if (isWall(map, x, y + 1)) addCliff(x + 1, y + 1, x, y + 1, x, y + 1, x, y);
+        if (isWall(map, x - 1, y)) addCliff(x, y + 1, x, y, x - 1, y, x, y);
       }
     }
 
@@ -1051,8 +1111,39 @@
       }
     }
 
+    // Sparse pressed-paper chips and foliage. Deterministic visual hash only;
+    // no random calls into MD's seeded gameplay generator and no new colliders.
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!isFloor(map, x, y) || (map.stairs && map.stairs.x === x && map.stairs.y === y)) continue;
+        const n = hash01(x * 19 + 7, y * 23 + 11);
+        if (n < 0.63) continue;
+        const wallX = isWall(map, x - 1, y) ? -1 : isWall(map, x + 1, y) ? 1 : 0;
+        const wallY = isWall(map, x, y - 1) ? -1 : isWall(map, x, y + 1) ? 1 : 0;
+        if (!wallX && !wallY && n < 0.94) continue;
+        const cx = x + (wallX ? wallX * 0.32 : (n - 0.5) * 0.65);
+        const cz = y + (wallY ? wallY * 0.32 : (hash01(y, x) - 0.5) * 0.65);
+        const yy = (floorH(x, y, map) + floorH(x + 1, y + 1, map)) * 0.5 + 0.035;
+        const radius = 0.032 + n * 0.035;
+        const cells = [{ x: x, y: y, room: isRoom(map, x, y) }];
+        paperQuad([
+          { x: cx - radius, y: yy, z: cz - radius * 0.3 },
+          { x: cx + radius * 0.1, y: yy, z: cz - radius * 0.7 },
+          { x: cx + radius, y: yy, z: cz + radius * 0.2 },
+          { x: cx - radius * 0.1, y: yy, z: cz + radius * 0.65 },
+        ], th.id === "forest" ? art.accent : art.fleck, cells, 0.85);
+      }
+    }
+    if (pb.idx.length) {
+      paperDetailMesh = pb.toMesh(new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide }));
+      paperDetailMesh.name = "dungeon-paper-details";
+      paperDetailMeta = pb.meta;
+      scene.add(paperDetailMesh);
+    }
+
     if (fb.idx.length) {
       floorMesh = fb.toMesh(caveMat(dirtTex, th));
+      floorMesh.name = "dungeon-floor";
       scene.add(floorMesh);
       floorMeta = fb.meta;
     }
@@ -1063,6 +1154,7 @@
     }
     if (wb.idx.length) {
       wallMesh = wb.toMesh(caveMat(rockTex, th));
+      wallMesh.name = "dungeon-wall";
       scene.add(wallMesh);
       wallMeta = wb.meta;
     }
@@ -1078,6 +1170,8 @@
         transparent: true,
         opacity: 0.95,
       }));
+      edgeMesh.name = "dungeon-theme-edge";
+      edgeMeta = eb.meta;
       scene.add(edgeMesh);
     }
 
@@ -1230,6 +1324,7 @@
       if (c.room) room = true;
     }
     if (!seen) return COL.black;
+    if (meta.paperColor) return tmpColor.copy(meta.paperColor).multiplyScalar((vis ? 1 : 0.18) * (meta.tone == null ? 1 : meta.tone));
     if (meta.kind === "floor") {
       const c0 = meta.cells[0];
       if (vis) return room ? tint(COL.floorRoomVis, c0.x, c0.y, 0.08) : tint(COL.floorCorrVis, c0.x, c0.y, 0.07);
@@ -1245,9 +1340,10 @@
     const arr = attr.array;
     for (let i = 0; i < meta.length; i++) {
       const c = shadeMeta(state, meta[i]);
-      arr[i * 3] = c.r;
-      arr[i * 3 + 1] = c.g;
-      arr[i * 3 + 2] = c.b;
+      const tone = meta[i].paperColor ? 1 : (meta[i].tone == null ? 1 : meta[i].tone);
+      arr[i * 3] = c.r * tone;
+      arr[i * 3 + 1] = c.g * tone;
+      arr[i * 3 + 2] = c.b * tone;
     }
     attr.needsUpdate = true;
   }
@@ -1262,6 +1358,8 @@
     paintMeshColors(wallMesh, wallMeta, state);
     paintMeshColors(floorMeshB, floorMetaB, state);
     paintMeshColors(wallMeshB, wallMetaB, state);
+    paintMeshColors(paperDetailMesh, paperDetailMeta, state);
+    paintMeshColors(edgeMesh, edgeMeta, state);
     if (map.stairs) {
       const v = visOf(state, map.stairs.x, map.stairs.y);
       stairsRoot.visible = v.seen;
@@ -1313,7 +1411,7 @@
       paper.rotation.set(0, Math.atan2(dx, dz), 0);
       paper.position.set(0, baseY != null ? baseY : 0.02, 0);
     } else {
-      const pull = paper.userData.kind === "item" ? 0.28 : 0.48;
+      const pull = paper.userData.kind === "item" ? 0.18 : 0.25;
       const y0 = baseY != null ? baseY : 0.03;
       paper.position.set((dx / len) * pull, y0 + (dy / len) * pull * 0.2, (dz / len) * pull);
     }
@@ -1339,6 +1437,7 @@
   }
 
   function hopY(vis, now) {
+    if (reducedMotion()) { vis.x = vis.toX; vis.z = vis.toZ; return 0; }
     const t = Math.min(1, (now - vis.t0) / HOP_MS);
     if (t >= 1) {
       vis.x = vis.toX;
@@ -1399,10 +1498,18 @@
       live.add(id);
       const vis = ensureVisual(actorVisual, id, allocActor, name, "actor", actor.x * S, actor.y * S, now, false);
       const hop = hopY(vis, now);
-      const bob = name === "bat" ? Math.sin(now * 0.008 + actor.x) * 0.06 + 0.12 : Math.sin(now * 0.003 + actor.x) * 0.015;
+      const bob = reducedMotion() ? 0 : name === "bat" ? Math.sin(now * 0.008 + actor.x) * 0.06 + 0.12 : Math.sin(now * 0.003 + actor.x) * 0.015;
       const clear = wallClearance(state.map, actor.x, actor.y);
       vis.group.position.set(vis.x + clear.x, 0, vis.z + clear.z);
-      billboard(vis.group.userData.paper, 0.03 + hop + bob);
+      const paper = vis.group.userData.paper;
+      billboard(paper, 0.03 + hop + bob);
+      // Rotate about the feet, like a sticker nudged by a fingertip, never a 3D turn.
+      const elapsed = now - (actor.animT0 || 0);
+      const action = !reducedMotion() && elapsed >= 0 && elapsed < 260;
+      const tap = action ? Math.sin(Math.PI * elapsed / 260) : 0;
+      if (actor.anim === "attack") paper.rotateZ(-0.06 * tap);
+      else if (actor.anim === "defend") paper.rotateZ(0.045 * tap);
+      vis.group.userData.shadow.material.opacity = name === "bat" ? 0.2 : 0.28 - hop * 0.35;
       if (name === "player") {
         updatePlayerSprite(vis.group.userData.paper, actor, state, vis, now);
       } else if (vis.group.userData.paper.userData.atlas) {
@@ -1480,6 +1587,7 @@
   }
 
   function overlayOpen() {
+    if (MD.isGameplayInputBlocked && MD.isGameplayInputBlocked()) return true;
     const nodes = document.querySelectorAll(".overlay");
     for (let i = 0; i < nodes.length; i++) {
       if (!nodes[i].classList.contains("hidden")) return true;
@@ -1496,6 +1604,8 @@
     if (!camReady) {
       lookCurrent.set(tx, 0, tz);
       camReady = true;
+    } else if (reducedMotion()) {
+      lookCurrent.set(tx, 0, tz);
     } else {
       lookCurrent.x += (tx - lookCurrent.x) * 0.14;
       lookCurrent.z += (tz - lookCurrent.z) * 0.14;
@@ -1505,13 +1615,13 @@
       playerLight.position.set(tx, 1.4, tz);
       const rid = state.map ? MD.getRoomId(state.map, p.x, p.y) : -1;
       const inRoom = rid != null && rid >= 0;
-      playerLight.color.set(inRoom ? 0xffe8b8 : 0xc8e0f0);
+      playerLight.color.set(currentTheme && currentTheme.lightColor || (inRoom ? 0xffe8b8 : 0xc8e0f0));
       playerLight.intensity = inRoom ? 0.45 : 0.35;
       playerLight.distance = inRoom ? 7 : 4.2;
     }
     if (hemi) {
-      hemi.color.set(0xfff0d8);
-      hemi.groundColor.set(0xa8c8b8);
+      hemi.color.set(currentTheme && currentTheme.hemiSky || 0xfff0d8);
+      hemi.groundColor.set(currentTheme && currentTheme.hemiGround || 0xa8c8b8);
     }
   }
 
@@ -1554,6 +1664,9 @@
   }
 
   function onOrbitKey(e) {
+    if (e.defaultPrevented) return;
+    const target = e.target;
+    if (target && (target.isContentEditable || (target.closest && target.closest("button,a,select,input,textarea,[contenteditable]")))) return;
     if (e.key !== "q" && e.key !== "Q" && e.key !== "e" && e.key !== "E") return;
     if (overlayOpen()) return;
     if (e.key === "e" || e.key === "E") {
@@ -1580,7 +1693,7 @@
 
     gameCanvas = canvas;
     renderer.setClearColor(FOG, 1);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, global.innerWidth < 700 ? 1.5 : 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.autoClear = true;
 

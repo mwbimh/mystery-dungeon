@@ -163,6 +163,107 @@
     },
   ];
 
+  // Visual-only paper palette shared by the diorama and lightweight 2D mode.
+  // It never participates in the map seed, collision, spawn or turn rules.
+  const PAPER = {
+    cave:    { rim: 0xfff0d6, ink: 0x62576b, accent: 0xb29abd, fleck: 0xe7d0a1, shape: "spark" },
+    forest:  { rim: 0xf1efcc, ink: 0x3e644b, accent: 0x93ad66, fleck: 0xe6d39a, shape: "leaf" },
+    wetcave: { rim: 0xe1f2f2, ink: 0x476575, accent: 0x9ac9d8, fleck: 0xc2dae3, shape: "rain" },
+    ruins:   { rim: 0xffedcd, ink: 0x7a624d, accent: 0xccaa6b, fleck: 0xe5c998, shape: "spark" },
+    wooden:  { rim: 0xfbe6bd, ink: 0x735238, accent: 0xbb8957, fleck: 0xe8c78c, shape: "mote" },
+    modern:  { rim: 0xf7f3e9, ink: 0x687381, accent: 0xa9bccc, fleck: 0xd7dfe5, shape: "mote" },
+    cyber:   { rim: 0xb4b2e1, ink: 0x27233f, accent: 0xc275bc, fleck: 0x91b4d2, shape: "rain" },
+    future:  { rim: 0xf5fbff, ink: 0x627e9b, accent: 0x97cbdc, fleck: 0xceecf4, shape: "spark" },
+  };
+  for (const theme of THEMES) {
+    theme.paper = PAPER[theme.id];
+    for (const layer of theme.fx) {
+      layer.shape = layer.size >= 0.4 ? "mote" : theme.paper.shape;
+      // Air should frame the stickers, rather than cover small targets.
+      layer.count = Math.min(layer.count, theme.id === "forest" ? 42 : 36);
+      if (layer.shape === "leaf") layer.size = 0.105;
+      if (layer.shape === "rain") layer.size = 0.095;
+    }
+  }
+  // A damp paper wash, without a plastic specular flash on each floor tile.
+  THEMES.find(theme => theme.id === "wetcave").phong = { specular: 0x395664, shininess: 16 };
+
+  function paperStyle(theme) { return (theme && theme.paper) || PAPER.cave; }
+  function cssColor(hex) { return "#" + hex.toString(16).padStart(6, "0"); }
+  function tileHash(x, y) {
+    let n = Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263);
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return (n >>> 0) / 4294967296;
+  }
+  const tileCache = new Map();
+  function flatTile(theme, wall, room, variant, size) {
+    const id = theme && theme.id || "cave";
+    const key = id + ":" + wall + ":" + room + ":" + variant + ":" + size;
+    if (tileCache.has(key)) return tileCache.get(key);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    const style = paperStyle(theme);
+    const palette = wall ? theme.palWall : theme.palFloor;
+    const factor = wall ? 0.73 : room ? 0.88 : 0.77;
+    ctx.fillStyle = "rgb(" + palette.map(v => Math.round(v * factor)).join(",") + ")";
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = cssColor(style.rim);
+    ctx.globalAlpha = wall ? 0.17 : 0.12;
+    ctx.fillRect(1, 1, size - 2, wall ? size * 0.57 : size - 2);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = cssColor(style.ink);
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = wall ? 0.30 : 0.13;
+    ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+    if (wall) {
+      const seam = Math.round(size * (0.52 + variant * 0.045));
+      ctx.beginPath(); ctx.moveTo(1, seam); ctx.lineTo(size - 1, seam + 1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(size * (variant % 2 ? 0.35 : 0.69), seam); ctx.lineTo(size * 0.5, size - 1); ctx.stroke();
+    }
+    // Tiny deterministic fibres, not a moving noise pass or a full-size image.
+    for (let i = 0; i < 5; i++) {
+      ctx.globalAlpha = wall ? 0.16 : 0.12;
+      ctx.fillStyle = cssColor(i % 2 ? style.ink : style.rim);
+      const fx = 2 + tileHash(i, variant + 31) * (size - 5);
+      const fy = 2 + tileHash(variant + 41, i) * (size - 5);
+      ctx.fillRect(fx, fy, i % 2 ? 2 : 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    // The normal renderer uses only 28px; keep this helper bounded for other callers.
+    if (tileCache.size >= 256) tileCache.clear();
+    tileCache.set(key, canvas);
+    return canvas;
+  }
+
+  function drawPaperTile(ctx, theme, tile) {
+    theme = theme || THEMES[0];
+    const { map, x, y, px, py, size, wall, inVis, room } = tile;
+    const style = paperStyle(theme);
+    const variant = Math.floor(tileHash(x, y) * 4);
+    ctx.save();
+    ctx.drawImage(flatTile(theme, wall, room, variant, size), px, py, size, size);
+    if (wall) {
+      // Highlight only the cut edge facing a traversable tile; continuous walls
+      // remain one mass and do not become a checkerboard of collectible stickers.
+      const open = (dx, dy) => x + dx >= 0 && y + dy >= 0 && x + dx < map.width && y + dy < map.height && map.tiles[y + dy][x + dx] !== MD.TILE.WALL;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = cssColor(style.rim);
+      ctx.beginPath();
+      if (open(0, -1)) { ctx.moveTo(px, py + 1); ctx.lineTo(px + size, py + 1); }
+      if (open(1, 0)) { ctx.moveTo(px + size - 1, py); ctx.lineTo(px + size - 1, py + size); }
+      if (open(0, 1)) { ctx.moveTo(px, py + size - 1); ctx.lineTo(px + size, py + size - 1); }
+      if (open(-1, 0)) { ctx.moveTo(px + 1, py); ctx.lineTo(px + 1, py + size); }
+      ctx.stroke();
+    }
+    if (!inVis) {
+      ctx.fillStyle = "rgba(12,17,26,0.76)";
+      ctx.fillRect(px, py, size, size);
+    }
+    ctx.restore();
+  }
+  MD.paperTerrain = { style: paperStyle, drawTile: drawPaperTile };
+
   function themeForFloor(floor) {
     const id = MD.floorConfig(floor).themeId;
     const theme = THEMES.find(theme => theme.id === id);

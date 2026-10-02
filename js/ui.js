@@ -64,22 +64,11 @@
           continue;
         }
         const t = map.tiles[y][x];
-        if (t === MD.TILE.WALL) {
-          ctx.fillStyle = inVis ? "#1e2a3c" : "#121820";
-          ctx.fillRect(px, py, TILE_PX, TILE_PX);
-          ctx.fillStyle = inVis ? "#2a3a52" : "#182030";
-          ctx.fillRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
-        } else {
-          // floor
-          const rid = map.roomIds[y][x];
-          let base = rid >= 0 ? "#1a2433" : "#151c28";
-          if (!inVis) base = rid >= 0 ? "#121925" : "#0e141d";
-          ctx.fillStyle = base;
-          ctx.fillRect(px, py, TILE_PX, TILE_PX);
-          // subtle grid
-          ctx.strokeStyle = inVis ? "#243044" : "#1a2230";
-          ctx.strokeRect(px + 0.5, py + 0.5, TILE_PX - 1, TILE_PX - 1);
-
+        MD.paperTerrain.drawTile(ctx, state.theme, {
+          map, x, y, px, py, size: TILE_PX, wall: t === MD.TILE.WALL,
+          inVis, room: map.roomIds[y][x] >= 0,
+        });
+        if (t !== MD.TILE.WALL) {
           if (t === MD.TILE.STAIRS && (inVis || explored.has(k))) {
             ctx.fillStyle = inVis ? "#f5c16c" : "#6b5a30";
             ctx.fillRect(px + 6, py + 6, TILE_PX - 12, TILE_PX - 12);

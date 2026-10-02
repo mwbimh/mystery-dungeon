@@ -1,0 +1,74 @@
+/* Portable PaperDialogue skin. Every selector is scoped; no game CSS required. */
+.pvn-overlay {
+  --pvn-paper:#fff6e7; --pvn-paper-shadow:#e3ceb0; --pvn-ink:#493e37;
+  --pvn-muted:#897768; --pvn-accent:#a96443; --pvn-line:#d9c4a7;
+  position:fixed; inset:0; z-index:14000; box-sizing:border-box;
+  display:flex; align-items:flex-end; justify-content:center;
+  padding:clamp(18px,4vw,58px); padding-bottom:max(28px,env(safe-area-inset-bottom));
+  color:var(--pvn-ink); background:linear-gradient(180deg,#34271620 0%,#34271655 60%,#34271680 100%);
+  backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+  font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:16px; line-height:1.5; isolation:isolate; overscroll-behavior:contain;
+  animation:pvn-fade-in .18s ease-out both;
+}
+.pvn-overlay *, .pvn-overlay *::before, .pvn-overlay *::after { box-sizing:border-box; }
+.pvn-overlay [hidden] { display:none !important; }
+.pvn-overlay button { font:inherit; cursor:pointer; touch-action:manipulation; }
+.pvn-overlay button:focus-visible { outline:3px solid var(--pvn-accent); outline-offset:4px; }
+.pvn-stage { position:relative; display:flex; align-items:flex-end; width:min(1100px,100%); gap:0; }
+.pvn-portrait { position:relative; flex:0 0 30%; height:min(470px,63vh); align-self:flex-end; z-index:2; pointer-events:none; }
+.pvn-portrait-image {
+  position:absolute; width:124%; max-width:none; height:100%; object-fit:contain; object-position:center bottom;
+  left:-12%; bottom:-8px; transform:rotate(-3deg); transform-origin:center bottom;
+  filter:drop-shadow(3px 0 0 #fffdf6) drop-shadow(-3px 0 0 #fffdf6) drop-shadow(0 3px 0 #fffdf6) drop-shadow(0 -3px 0 #fffdf6) drop-shadow(0 9px 6px #4e34273b);
+  animation:pvn-portrait-in .3s cubic-bezier(.2,.8,.3,1) both;
+}
+.pvn-portrait-fallback { display:grid; place-items:center; position:absolute; inset:20% 8% 2%; border:8px solid #fffdf6; border-radius:48% 48% 44% 44%; background:#d9c6a7; color:#fff8e9; font:bold clamp(60px,9vw,110px) Georgia,serif; box-shadow:0 8px 18px #4e342735; transform:rotate(-4deg); }
+.pvn-card {
+  position:relative; flex:1; min-width:0; max-height:calc(100dvh - 74px); overflow:auto;
+  padding:25px 32px 23px; border:2px solid #fffaf1; border-radius:8px 16px 12px 6px;
+  background:radial-gradient(ellipse at 5% 0%,#ffffffb0,transparent 70%),var(--pvn-paper);
+  box-shadow:0 6px 0 var(--pvn-paper-shadow),0 8px 0 #fff7e3,0 20px 40px #39291335;
+  transform:rotate(.35deg); scrollbar-color:var(--pvn-line) transparent;
+  animation:pvn-card-in .23s ease-out both;
+}
+.pvn-card::after { content:""; pointer-events:none; position:absolute; top:0; right:0; width:36px; height:36px; background:linear-gradient(45deg,transparent 48%,#d8bd9140 50%,#fffdf7 70%); }
+.pvn-heading { display:flex; align-items:center; gap:12px; min-height:30px; margin:0 0 16px; border-bottom:1px dashed var(--pvn-line); padding-bottom:12px; }
+.pvn-chapter { font-size:11px; letter-spacing:.16em; color:var(--pvn-muted); flex:1; }
+.pvn-counter { font:italic 20px Georgia,serif; color:var(--pvn-muted); }
+.pvn-close { position:relative; z-index:1; display:grid; place-items:center; width:34px; height:34px; padding:0; color:var(--pvn-muted); background:transparent; border:1px solid var(--pvn-line); border-radius:50%; font-size:24px !important; line-height:1; }
+.pvn-close:hover { color:var(--pvn-accent); background:#f1dfc7; }
+.pvn-signature { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.pvn-speaker { margin:0; font:bold clamp(23px,2.4vw,30px) Georgia,"Songti SC",SimSun,serif; line-height:1.2; letter-spacing:.025em; color:var(--pvn-ink); }
+.pvn-role { font-size:11px; color:var(--pvn-accent); letter-spacing:.12em; }
+.pvn-text { min-height:76px; margin:0 0 18px; font-size:clamp(15px,1.45vw,18px); line-height:1.95; color:var(--pvn-ink); white-space:pre-line; overflow-wrap:anywhere; }
+.pvn-prompt { margin:4px 0 9px; font-size:11px; color:var(--pvn-muted); letter-spacing:.1em; }
+.pvn-choices { display:grid; gap:8px; }
+.pvn-choice { display:flex; align-items:center; gap:12px; width:100%; min-height:46px; padding:10px 13px; text-align:left; border:1px solid var(--pvn-line); border-radius:4px 8px 7px 4px; background:#ffffff66; color:var(--pvn-ink); transition:background .15s,transform .15s,border-color .15s; }
+.pvn-choice:hover,.pvn-choice:focus-visible { background:#f6e5c9; border-color:#bd9571; transform:translateX(3px); }
+.pvn-choice-number { font:italic 15px Georgia,serif; color:var(--pvn-muted); }
+.pvn-choice-label { flex:1; font-size:13px; }
+.pvn-choice-arrow { color:var(--pvn-accent); font-size:16px; }
+.pvn-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:19px; }
+.pvn-key-hint { font-size:10px; color:var(--pvn-muted); line-height:1.8; letter-spacing:.03em; }
+.pvn-next { flex-shrink:0; min-height:40px; padding:7px 17px; border:1px solid #b68e69; border-radius:3px 8px 5px 6px; color:var(--pvn-ink); background:#f1dfbf; font-size:13px !important; }
+.pvn-next:hover { background:#e8cfa6; }
+@keyframes pvn-fade-in { from { opacity:0; } to { opacity:1; } }
+@keyframes pvn-card-in { from { opacity:0; translate:0 12px; } to { opacity:1; translate:0 0; } }
+@keyframes pvn-portrait-in { from { opacity:0; translate:-10px 15px; } to { opacity:1; translate:0 0; } }
+@media(max-width:700px) {
+  .pvn-overlay { padding:16px 14px max(22px,env(safe-area-inset-bottom)); }
+  .pvn-stage { display:block; }
+  .pvn-portrait { position:absolute; height:clamp(170px,30vh,260px); width:44%; top:0; left:-7px; transform:translateY(-91%); }
+  .pvn-portrait-image { bottom:0; width:100%; left:0; }
+  .pvn-card { padding:16px 19px 17px; max-height:calc(100dvh - 160px); overflow:auto; }
+  .pvn-heading { margin-bottom:12px; padding-bottom:8px; }
+  .pvn-signature { gap:9px; margin-bottom:10px; }
+  .pvn-text { min-height:64px; font-size:15px; line-height:1.8; margin-bottom:12px; }
+  .pvn-choice { min-height:44px; padding:8px 10px; }
+  .pvn-footer { margin-top:13px; gap:8px; }
+  .pvn-key-hint { max-width:170px; font-size:9px; }
+}
+@media(max-height:520px) and (min-width:701px) { .pvn-overlay { padding:18px 32px; } .pvn-card { max-height:calc(100dvh - 42px); padding:13px 24px; } .pvn-heading { margin-bottom:9px; padding-bottom:6px; } .pvn-text { min-height:0; margin-bottom:10px; } .pvn-footer { margin-top:10px; } .pvn-portrait { height:82vh; } }
+@media(prefers-reduced-motion:reduce) { .pvn-overlay,.pvn-overlay * { animation:none !important; transition:none !important; } }
+.pvn-reduced-motion,.pvn-reduced-motion * { animation:none !important; transition:none !important; }
