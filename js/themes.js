@@ -1,4 +1,4 @@
-/* Dungeon floor themes: every 3 floors shares one environment.
+/* Dungeon floor themes: dungeon floor bands choose the environment.
    Each theme drives: fog/sky color + fog density, hemisphere light,
    floor+wall textures (runtime PNG with procedural fallback palette),
    vertex tint palette, wall-corner decoration pool and ambient FX layers.
@@ -163,15 +163,14 @@
     },
   ];
 
-  const FLOORS_PER_THEME = MD.config.themes.floorsPerTheme;
-
   function themeForFloor(floor) {
-    const idx = Math.min(MD.config.themes.order.length - 1, Math.floor((Math.max(1, floor) - 1) / FLOORS_PER_THEME));
-    const theme = THEMES.find(theme => theme.id === MD.config.themes.order[idx]);
-    return { ...theme, name: MD.t("theme." + theme.id + ".name") };
+    const id = MD.floorConfig(floor).themeId;
+    const theme = THEMES.find(theme => theme.id === id);
+    if (!theme) throw new Error("Unknown theme ID: " + id);
+    const nameKey = MD.config.themeCatalog[id].nameKey;
+    return { ...theme, name: MD.t(nameKey) };
   }
 
   MD.THEMES = THEMES;
-  MD.FLOORS_PER_THEME = FLOORS_PER_THEME;
   MD.themeForFloor = themeForFloor;
 })(typeof window !== "undefined" ? window : globalThis);

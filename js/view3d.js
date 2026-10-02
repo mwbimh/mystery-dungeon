@@ -76,7 +76,7 @@
   let lookCurrent = null;
   let camReady = false;
   let vidSeq = 1;
-  let paperMats = {};
+  let paperMats = Object.create(null);
 
   const orbit = {
     yaw: 0.68,
@@ -641,7 +641,7 @@
       }
       group.userData.paper = null;
     }
-    const paper = (name === "player" || name === "slime" || name === "bat")
+    const paper = (MD.sprites && MD.sprites.atlas && Object.prototype.hasOwnProperty.call(MD.sprites.atlas, name))
       ? makeAtlasPaperMesh(name)
       : makePaperMesh(name, kind);
     paper.renderOrder = 3;
@@ -1280,16 +1280,11 @@
 
   function spriteNameForActor(a) {
     if (a.kind === "player") return "player";
-    if (a.type === "slime") return "slime";
-    if (a.type === "bat") return "bat";
-    if (a.type === "shell") return "shell";
-    return "slime";
+    return a.type;
   }
 
   function spriteNameForItem(it) {
-    const tp = it && it.type;
-    if (tp === "onigiri" || tp === "bigOnigiri" || tp === "rock" || tp === "sleepHerb" || tp === "knockStaff") return tp;
-    return "rock";
+    return it.type;
   }
 
   function hideUnused(map, live) {
@@ -1410,7 +1405,7 @@
       billboard(vis.group.userData.paper, 0.03 + hop + bob);
       if (name === "player") {
         updatePlayerSprite(vis.group.userData.paper, actor, state, vis, now);
-      } else if (name === "slime" || name === "bat") {
+      } else if (vis.group.userData.paper.userData.atlas) {
         updateMonsterSprite(vis.group.userData.paper, actor, name);
       }
       const badge = vis.group.userData.badge;
@@ -1657,7 +1652,8 @@
     scene.add(stairsRoot);
     scene.add(decoRoot);
 
-    ["slime", "bat", "shell", "onigiri", "bigOnigiri", "rock", "sleepHerb", "knockStaff", "crystal", "mushroom", "lantern", "vine", "flower", "stairs"].forEach(paperMat);
+    new Set([...Object.keys(MD.config.enemies), ...Object.keys(MD.config.items),
+      "crystal", "mushroom", "lantern", "vine", "flower", "stairs"]).forEach(paperMat);
 
     canvas.style.cursor = "grab";
     attachOrbit(canvas);

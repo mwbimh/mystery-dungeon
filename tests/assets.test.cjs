@@ -27,7 +27,7 @@ async function loadSprites() {
   const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game.json')));
   const context = vm.createContext({ MD: { config }, Image });
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8'), context);
-  context.MD.t = context.MDConfig.createTranslator(config, 'en');
+  context.MDConfig.installRuntime(context.MD, config, { locale: 'en' });
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/actors.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/sprites.js'), 'utf8'), context);
   await context.MD.sprites.ready;

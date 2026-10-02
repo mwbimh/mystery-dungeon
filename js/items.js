@@ -1,59 +1,48 @@
-/* Items & inventory helpers */
+/* Shared item definitions and inventory helpers. Behavior comes from effect templates. */
 (function (global) {
   const MD = global.MD;
+  const ACTION_FIELDS = { use: "useEffectId", eat: "useEffectId", throw: "throwEffectId", swing: "swingEffectId" };
+  const ITEM_DEFS = Object.create(null);
 
-  const ITEM_DEFS = {
-    onigiri: {
-      id: "onigiri",
-      verbs: ["eat", "throw"],
-      eatLabel: "吃",
-      throwLabel: "扔",
-    },
-    bigOnigiri: {
-      id: "bigOnigiri",
-      verbs: ["eat", "throw"],
-      eatLabel: "吃",
-      throwLabel: "扔",
-    },
-    rock: {
-      id: "rock",
-      verbs: ["throw"],
-      throwLabel: "扔",
-    },
-    sleepHerb: {
-      id: "sleepHerb",
-      verbs: ["eat", "throw"],
-      eatLabel: "吃",
-      throwLabel: "扔",
-    },
-    knockStaff: {
-      id: "knockStaff",
-      verbs: ["swing", "throw"],
-      swingLabel: "挥",
-      throwLabel: "扔",
-    },
-  };
+  function itemEffect(item, action) {
+    const def = ITEM_DEFS[typeof item === "string" ? item : item && item.type];
+    const field = ACTION_FIELDS[action];
+    if (!def || !field || def[field] === "none") return null;
+    return MD.config.itemEffects[def[field]] || null;
+  }
 
-  for (const [id, definition] of Object.entries(ITEM_DEFS)) {
-    Object.assign(definition, MD.config.items[id]);
-    definition.name = MD.t(definition.nameKey);
+  for (const [id, row] of Object.entries(MD.config.items)) {
+    const definition = { ...row, id, name: MD.t(row.nameKey), verbs: [] };
+    ITEM_DEFS[id] = definition;
+    if (row.useEffectId !== "none") definition.verbs.push("eat");
+    if (row.swingEffectId !== "none") definition.verbs.push("swing");
+    if (row.throwEffectId !== "none") definition.verbs.push("throw");
+    const use = itemEffect(id, "use");
+    definition.eatLabel = MD.t(use && (use.kind === "food" || use.kind === "sleep") ? "item.eat" : "item.use");
+    definition.throwLabel = MD.t("item.throw");
+    definition.swingLabel = MD.t("item.swing");
+  }
+
+  function hasCharges(item) {
+    return !!itemEffect(item, "swing");
   }
 
   function makeItem(type) {
     const def = ITEM_DEFS[type];
     if (!def) throw new Error("unknown item " + type);
+    // Keep the legacy RNG order: identity first, then charges for charged items.
     const item = { type, name: def.name, uid: MD.random().toString(36).slice(2, 9) };
-    if (type === "knockStaff") {
-      item.charges = MD.randInt(MD.config.effects.staffCharges.min, MD.config.effects.staffCharges.max);
-      item.name = ITEM_DEFS.knockStaff.name + " [" + item.charges + "]";
+    if (hasCharges(item)) {
+      item.charges = MD.randInt(def.chargesMin, def.chargesMax);
+      item.name = displayName(item);
     }
     return item;
   }
 
   function displayName(item) {
     if (!item) return "";
-    if (item.type === "knockStaff") return ITEM_DEFS.knockStaff.name + " [" + (item.charges | 0) + "]";
-    return ITEM_DEFS[item.type]?.name || item.name || "?";
+    const name = ITEM_DEFS[item.type]?.name || item.name || "?";
+    return hasCharges(item) ? name + " [" + (item.charges | 0) + "]" : name;
   }
 
   function itemColor(item) {
@@ -61,7 +50,7 @@
   }
 
   function randomFloorItem(floorNum) {
-    return makeItem(MD.weightedPick(MD.config.itemDrops));
+    return makeItem(MD.weightedPick(MD.floorConfig(floorNum).itemEntries));
   }
 
   function saveWarehouse(list) {
@@ -77,10 +66,9 @@
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) return [];
       return arr.map((it) => {
-        // refresh display name for staff
-        if (it && it.type === "knockStaff") {
-          it.name = ITEM_DEFS.knockStaff.name + " [" + (it.charges | 0) + "]";
-        }
+        // Preserve stored IDs, charges and unknown legacy payloads. Refresh only
+        // charged display names; uncharged names are resolved on display.
+        if (it && hasCharges(it)) it.name = displayName(it);
         return it;
       });
     } catch (_) {
@@ -89,6 +77,8 @@
   }
 
   MD.ITEM_DEFS = ITEM_DEFS;
+  MD.itemEffect = itemEffect;
+  MD.itemHasCharges = hasCharges;
   MD.makeItem = makeItem;
   MD.displayName = displayName;
   MD.itemColor = itemColor;

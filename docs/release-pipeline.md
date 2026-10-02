@@ -2,7 +2,7 @@
 
 ## 分支与人工关卡
 
-1. 日常开发和 Excel 调整提交到 `design`。
+1. 日常开发和六本领域 Excel（`rules / monsters / items / dungeons / spawns / texts.xlsx`）调整提交到 `design`。
 2. 开 `design → preview` PR；`Release route` 与 `Validate workbook and game` 必须通过。检查包含工作簿结构/值/引用、本地化、固定 SHA-256 的 Luban 5.1.0、生成 JSON、语法、资源、单元与 Chromium 测试。
 3. 合并到 `preview` 后，同一提交再次构建并保存静态产物。通过已授权的 Sites 发布流程更新私有预览，核对实际部署 SHA，并执行试玩验收。
 4. **只有人确认该预览提交可发布后**，才开 `preview → main` PR。PR 描述记录被验收的 SHA、私有预览入口、CI 运行链接及验收结果。预览有新提交时，旧确认不覆盖新内容。
@@ -19,7 +19,7 @@
 - 普通检查权限只有 `contents: read`，checkout 不保留凭据；构建 checkout 开启 Git LFS。
 - Python 3.12、Node 22、.NET SDK 8.0.408；Python 依赖锁定版本、npm 使用锁文件。Luban 安装器锁定 5.1.0 并验证官方归档 SHA-256；缺工具或校验失败直接终止，不使用替代导出器。
 - 产物 `mystery-dungeon-static-<sha>` 保留 14 天，只含 `dist/`。构建失败不上传成功产物，不部署。
-- `dist/build-info.json` 记录实际 checkout SHA、分支、CI URL、生成配置及两个工作簿的 SHA-256。URL 中无凭据。只有 `main` push 才打包 `github-pages` 产物。
+- `dist/build-info.json` 记录实际 checkout SHA、分支、CI URL、生成配置及六本工作簿的 SHA-256（`workbooksSha256`）。URL 中无凭据。只有 `main` push 才打包 `github-pages` 产物。
 - Pages job 依赖验证完成，并独占 `pages: write` / `id-token: write` 权限及 `github-pages` 环境；不创建 PAT、部署密钥或机器账号。部署采用官方 `configure-pages`、`upload-pages-artifact`、`deploy-pages` actions。
 - PR/preview 的新构建取消同分支旧构建；main 发布不取消正在进行的运行，Pages 部署串行。
 
@@ -50,11 +50,13 @@
 
 GitHub Actions 已负责合并 preview 后的构建、校验和可追溯产物；**CI 通过不等于 Sites 已更新**。当前仓库没有可由公开 GitHub runner 调用的已授权 Sites CI 发布接口或凭据。不得臆造 endpoint、上传个人 token 或宣称已经全自动打通。
 
-使用 [Sites 预览流程](sites-preview.md) 中已授权的 Sites connector/CLI，由受控助手从准确 preview SHA 构建/验证并更新原有私有 Site。发布后核对线上来源 SHA 与预览分支，而不是只报告提交成功。日常里程碑任务可以包含这一步，但它属于助手执行的发布，和 GitHub Actions 原生连续部署不同。若将来接入官方 CI 凭据/API，需另行明确授权其访问范围。
+使用 [Sites 预览流程](sites-preview.md) 中已授权的 Sites connector/CLI，由受控助手从准确 preview SHA 构建/验证并更新原有私有 Site。发布后核对线上来源 SHA 与预览分支，而不是只报告提交成功。日常里程碑任务可以包含这一步，但它属于已授权发布流程，和 GitHub Actions 原生连续部署不同。使用官方受控发布工具处理登录与权限，不在文档、shell 命令、日志或 GitHub Secrets 中复制个人凭据。若将来接入官方 CI 发布能力，需另行明确授权其访问范围。
 
 ## Excel 与 Git LFS
 
-`config/game.xlsx`（30,713 bytes）与 `config/texts.xlsx`（7,986 bytes）已是普通 Git 二进制 blob。本次仅在 `.gitattributes` 为这两个精确路径排除 LFS，**不改工作簿任何字节**，使现有实际存储与声明一致；二进制合并继续禁用。其他 Excel 和全部已有媒体仍按原 LFS 规则存储。CI checkout 拉取 LFS，资源测试同时拒绝把 pointer 文本当 PNG。
+`config/rules.xlsx`、`monsters.xlsx`、`items.xlsx`、`dungeons.xlsx`、`spawns.xlsx`、`texts.xlsx` 是普通 Git 二进制 blob。`.gitattributes` 仅为这六个精确路径排除 LFS，二进制合并继续禁用；旧 `config/game.xlsx` 已移除，其例外规则也移除。仅另为 `tests/fixtures/player-hp47-rules.xlsx` 这个隔离测试工作簿设置普通 Git blob；其他 Excel 和全部媒体保留原 LFS 规则。CI checkout 拉取 LFS，资源测试拒绝把 pointer 文本当 PNG。
+
+六本是需要评审的源表，生成 JSON 不写回分支。发布工具从六本分别记录 SHA-256，版本 2 的 JSON 与浏览器都限 4 MiB；每次构建仍使用实际 Luban，无备用转换器。
 
 ## 回退
 

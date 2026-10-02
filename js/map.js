@@ -88,13 +88,14 @@
    * @returns {{width,height,tiles,roomIds,rooms,stairs,playerSpawn,monsterHouseRooms}}
    */
   function generateFloor(floorNum) {
-    const width = randInt(MD.config.map.width.min, MD.config.map.width.max);
-    const height = randInt(MD.config.map.height.min, MD.config.map.height.max);
+    const mapConfig = MD.floorConfig(floorNum).map;
+    const width = randInt(mapConfig.width.min, mapConfig.width.max);
+    const height = randInt(mapConfig.height.min, mapConfig.height.max);
     const tiles = Array.from({ length: height }, () => Array(width).fill(TILE.WALL));
     const roomIds = Array.from({ length: height }, () => Array(width).fill(null));
 
-    const cols = width >= 56 ? 4 : 3;
-    const rows = 3;
+    const cols = width >= mapConfig.gridThreshold ? mapConfig.gridColsLarge : mapConfig.gridColsSmall;
+    const rows = mapConfig.gridRows;
     const margin = 1;
     const cellW = Math.floor((width - margin * 2) / cols);
     const cellH = Math.floor((height - margin * 2) / rows);
@@ -106,12 +107,12 @@
     const slotPlan = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        slotPlan.push({ r, c, skip: MD.random() < MD.config.map.skipRoomChance });
+        slotPlan.push({ r, c, skip: MD.random() < mapConfig.skipRoomChance });
       }
     }
-    // Guarantee at least 5 rooms
+    // Guarantee the profile's minimum number of active room slots
     let active = slotPlan.filter((s) => !s.skip);
-    while (active.length < 5) {
+    while (active.length < mapConfig.minRooms) {
       const skipped = slotPlan.filter((s) => s.skip);
       if (!skipped.length) break;
       const pick = skipped[randInt(0, skipped.length - 1)];
@@ -121,7 +122,7 @@
 
     // Occasional large hall: merge 2 adjacent rooms horizontally
     let hallPair = null;
-    if (MD.random() < MD.config.map.hallChance) {
+    if (MD.random() < mapConfig.hallChance) {
       const candidates = [];
       for (const s of active) {
         const right = active.find((o) => o.r === s.r && o.c === s.c + 1);
@@ -142,10 +143,10 @@
         rx = forceRect.x;
         ry = forceRect.y;
       } else {
-        const maxW = Math.max(5, cellW - 3);
-        const maxH = Math.max(4, cellH - 3);
-        rw = randInt(5, Math.min(12, maxW));
-        rh = randInt(4, Math.min(9, maxH));
+        const maxW = Math.max(mapConfig.roomWidthMin, cellW - 3);
+        const maxH = Math.max(mapConfig.roomHeightMin, cellH - 3);
+        rw = randInt(mapConfig.roomWidthMin, Math.min(mapConfig.roomWidthMax, maxW));
+        rh = randInt(mapConfig.roomHeightMin, Math.min(mapConfig.roomHeightMax, maxH));
         rx = ox + randInt(1, Math.max(1, cellW - rw - 1));
         ry = oy + randInt(1, Math.max(1, cellH - rh - 1));
         // Clamp
@@ -179,8 +180,8 @@
       const ox = margin + a.c * cellW;
       const oy = margin + a.r * cellH;
       const spanW = cellW * 2 - 2;
-      const rw = randInt(Math.min(14, spanW - 2), Math.min(22, spanW));
-      const rh = randInt(6, Math.min(10, cellH - 2));
+      const rw = randInt(Math.min(mapConfig.hallWidthMin, spanW - 2), Math.min(mapConfig.hallWidthMax, spanW));
+      const rh = randInt(mapConfig.hallHeightMin, Math.min(mapConfig.hallHeightMax, cellH - 2));
       let rx = ox + randInt(1, Math.max(1, spanW - rw));
       let ry = oy + randInt(1, Math.max(1, cellH - rh - 1));
       if (rx + rw >= width - 1) rx = width - 1 - rw;
@@ -226,12 +227,12 @@
       }
     }
     // Extra loops
-    const extras = Math.min(2, Math.floor(edges.length / 4));
+    const extras = Math.min(mapConfig.extraLoopMax, Math.floor(edges.length / mapConfig.extraLoopDivisor));
     let added = 0;
     for (const e of edges) {
       if (added >= extras) break;
       if (used.includes(e)) continue;
-      if (MD.random() < MD.config.map.loopChance) {
+      if (MD.random() < mapConfig.loopChance) {
         carveCorridor(tiles, roomIds, rooms[e.i].cx, rooms[e.i].cy, rooms[e.j].cx, rooms[e.j].cy);
         added++;
       }
@@ -291,11 +292,11 @@
       reachable = floodFillReachable(tiles, playerSpawn.x, playerSpawn.y);
     }
 
-    // Monster houses: 15–25% of non-spawn rooms
+    // Monster houses: profile chance range, excluding the spawn room
     const monsterHouseRooms = [];
     for (const r of rooms) {
       if (r.id === best.id) continue;
-      const chance = MD.config.map.monsterHouseChance.min + MD.random() * (MD.config.map.monsterHouseChance.max - MD.config.map.monsterHouseChance.min);
+      const chance = mapConfig.monsterHouseChance.min + MD.random() * (mapConfig.monsterHouseChance.max - mapConfig.monsterHouseChance.min);
       if (MD.random() < chance) {
         r.isMonsterHouse = true;
         monsterHouseRooms.push(r.id);

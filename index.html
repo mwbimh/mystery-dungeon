@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>迷宫</title>
-  <link rel="stylesheet" href="css/style.css?v=59" />
+  <link rel="stylesheet" href="css/style.css?v=67" />
 </head>
 <body>
   <div class="app">
@@ -22,6 +22,7 @@
           <div class="hud-bars">
             <div class="gbar hp" id="barHp"><span></span><em id="statHp">30/30</em></div>
             <div class="gbar belly" id="barBelly"><span></span><em id="statBelly">100/100</em></div>
+            <div class="hud-dungeon" id="statDungeon"></div>
             <div class="hud-turn">回合 <span id="statTurn">0</span></div>
             <div class="status-pills" id="statusPills"></div>
           </div>
@@ -133,6 +134,12 @@
         <span class="town-label">DeepSeek · 仓库</span>
       </button>
       <div class="town-msg-chip" id="townMsg">欢迎来到镇子。点上面入口进迷宫，点自己开仓库。</div>
+      <section class="dungeon-choice" aria-labelledby="dungeonChooseLabel">
+        <label for="dungeonSelect" id="dungeonChooseLabel">选择迷宫</label>
+        <select id="dungeonSelect" aria-describedby="dungeonChoiceHint"></select>
+        <button type="button" id="btnNewRun">开始新冒险</button>
+        <p id="dungeonChoiceHint">从第 1 层开始；回镇子后可切换迷宫</p>
+      </section>
       <button type="button" class="town-help" id="btnHelpTown" title="帮助">?</button>
       <!-- keep legacy ids for keyboard shortcuts -->
       <button type="button" id="btnEnter" hidden>进入迷宫</button>
@@ -151,9 +158,9 @@
         <dt>攻击</dt><dd>撞到敌人即近战</dd>
         <dt>拾取</dt><dd>踩上自动拾取；也可按 G</dd>
         <dt>道具</dt><dd>I / Tab 展开背包 · 吃 / 扔 / 挥（杖）</dd>
-        <dt>技能栏</dt><dd>击退之杖、石头可拖到主动栏；右键卸下（消失）；单击普攻攻击面向格；杖和石头按住向外拖瞄准释放。睡眠草和饭团只在背包里用</dd>
+        <dt>技能栏</dt><dd id="helpSkills">击退之杖、石头可拖到主动栏；右键卸下（消失）；单击普攻攻击面向格；杖和石头按住向外拖瞄准释放。睡眠草和饭团只在背包里用</dd>
         <dt>仓库</dt><dd>背包展开后点「仓库」，从背包右侧滑出</dd>
-        <dt>楼梯</dt><dd>踩上下楼楼梯即前往下一层（第 8 层出口通关）</dd>
+        <dt>楼梯</dt><dd id="helpStairs">踩上下楼楼梯即前往下一层（第 8 层出口通关）</dd>
         <dt>视角</dt><dd>俯视角固定，右键 / Q / E 绕主角水平旋转，滚轮缩放。方向键与 WASD 按镜头方向移动（上键往画面深处走）</dd>
         <dt>死亡</dt><dd>HP 归零丢掉背包返回镇子，仓库保留</dd>
       </dl>
@@ -178,7 +185,7 @@
   <script>
   (function () {
     var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
-    var v = "66";
+    var v = "67";
     var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
     if (!flat) {
       files.unshift("vendor/three.min.js");

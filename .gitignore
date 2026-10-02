@@ -30,10 +30,12 @@ __pycache__/
 Thumbs.db
 Desktop.ini
 
-# Generated exclusively from config/game.xlsx
+# Generated exclusively from the six domain workbooks
 /config/game.json
 /node_modules/
 /dist/
 /.dist-staging/
 /test-results/
 /.tools/
+
+/config/*.inspect.ndjson

@@ -1,50 +1,137 @@
 <module name="">
-  <bean name="TextsRow">
-    <var name="key" type="string" />
-    <var name="zhCN" type="string" />
-    <var name="en" type="string" />
-  </bean>
-  <table name="Texts" value="TextsRow" input="Texts@texts.xlsx" index="key" />
   <bean name="SettingsRow">
     <var name="path" type="string" />
     <var name="value" type="double" />
+    <var name="description" type="string" />
+    <var name="unit" type="string" />
+    <var name="allowedRange" type="string" />
+    <var name="example" type="string" />
   </bean>
-  <table name="Settings" value="SettingsRow" input="Settings@game.xlsx" index="path" />
+  <table name="Settings" value="SettingsRow" input="Settings@rules.xlsx" index="path" />
+  <bean name="RuleProfilesRow">
+    <var name="id" type="string" />
+  </bean>
+  <table name="RuleProfiles" value="RuleProfilesRow" input="RuleProfiles@rules.xlsx" index="id" />
+  <bean name="RuleValuesRow">
+    <var name="profileId" type="string#ref=RuleProfiles" />
+    <var name="path" type="string" />
+    <var name="value" type="double" />
+    <var name="description" type="string" />
+    <var name="unit" type="string" />
+    <var name="allowedRange" type="string" />
+    <var name="example" type="string" />
+  </bean>
+  <table name="RuleValues" value="RuleValuesRow" input="RuleValues@rules.xlsx" mode="list" />
+  <bean name="MapProfilesRow">
+    <var name="id" type="string" />
+  </bean>
+  <table name="MapProfiles" value="MapProfilesRow" input="MapProfiles@dungeons.xlsx" index="id" />
+  <bean name="MapValuesRow">
+    <var name="profileId" type="string#ref=MapProfiles" />
+    <var name="path" type="string" />
+    <var name="value" type="double" />
+    <var name="description" type="string" />
+    <var name="unit" type="string" />
+    <var name="allowedRange" type="string" />
+    <var name="example" type="string" />
+  </bean>
+  <table name="MapValues" value="MapValuesRow" input="MapValues@dungeons.xlsx" mode="list" />
   <bean name="EnemiesRow">
     <var name="id" type="string" />
-    <var name="nameKey" type="string#ref=Texts" />
+    <var name="nameKey" type="string#ref=TextKeys" />
     <var name="color" type="string" />
-    <var name="hp" type="int#range=[1,10000]" />
-    <var name="atk" type="int#range=[0,1000]" />
-    <var name="def" type="int#range=[0,1000]" />
+    <var name="hp" type="int" />
+    <var name="atk" type="int" />
+    <var name="def" type="int" />
     <var name="glyph" type="string" />
+    <var name="behaviorTemplate" type="string" />
   </bean>
-  <table name="Enemies" value="EnemiesRow" input="Enemies@game.xlsx" index="id" />
+  <table name="Enemies" value="EnemiesRow" input="Enemies@monsters.xlsx" index="id" />
+  <bean name="ItemEffectsRow">
+    <var name="id" type="string" />
+    <var name="kind" type="string" />
+    <var name="power" type="int" />
+    <var name="turnsMin" type="int" />
+    <var name="turnsMax" type="int" />
+    <var name="range" type="int" />
+    <var name="wallDamage" type="int" />
+  </bean>
+  <table name="ItemEffects" value="ItemEffectsRow" input="ItemEffects@items.xlsx" index="id" />
   <bean name="ItemsRow">
     <var name="id" type="string" />
-    <var name="nameKey" type="string#ref=Texts" />
+    <var name="nameKey" type="string#ref=TextKeys" />
     <var name="color" type="string" />
+    <var name="useEffectId" type="string#ref=ItemEffects" />
+    <var name="throwEffectId" type="string#ref=ItemEffects" />
+    <var name="swingEffectId" type="string#ref=ItemEffects" />
+    <var name="chargesMin" type="int" />
+    <var name="chargesMax" type="int" />
+    <var name="activeSkill" type="int" />
+    <var name="passiveSkill" type="int" />
+    <var name="dropOnMiss" type="int" />
   </bean>
-  <table name="Items" value="ItemsRow" input="Items@game.xlsx" index="id" />
-  <bean name="EnemySpawnsRow">
-    <var name="fromFloor" type="int#range=[1,240]" />
-    <var name="id" type="string#ref=Enemies" />
-    <var name="weight" type="double#range=[0,100000]" />
+  <table name="Items" value="ItemsRow" input="Items@items.xlsx" index="id" />
+  <bean name="DungeonsRow">
+    <var name="id" type="string" />
+    <var name="nameKey" type="string#ref=TextKeys" />
+    <var name="totalFloors" type="int" />
+    <var name="mapProfileId" type="string#ref=MapProfiles" />
+    <var name="ruleProfileId" type="string#ref=RuleProfiles" />
+    <var name="isDefault" type="int" />
   </bean>
-  <table name="EnemySpawns" value="EnemySpawnsRow" input="EnemySpawns@game.xlsx" mode="list" />
-  <bean name="ItemDropsRow">
-    <var name="id" type="string#ref=Items" />
-    <var name="weight" type="double#range=[0,100000]" />
-  </bean>
-  <table name="ItemDrops" value="ItemDropsRow" input="ItemDrops@game.xlsx" index="id" />
+  <table name="Dungeons" value="DungeonsRow" input="Dungeons@dungeons.xlsx" index="id" />
   <bean name="ThemeCatalogRow">
     <var name="id" type="string" />
-    <var name="nameKey" type="string#ref=Texts" />
+    <var name="nameKey" type="string#ref=TextKeys" />
   </bean>
-  <table name="ThemeCatalog" value="ThemeCatalogRow" input="ThemeCatalog@game.xlsx" index="id" />
-  <bean name="ThemesRow">
-    <var name="position" type="int#range=[1,32]" />
-    <var name="id" type="string#ref=ThemeCatalog" />
+  <table name="ThemeCatalog" value="ThemeCatalogRow" input="ThemeCatalog@dungeons.xlsx" index="id" />
+  <bean name="FloorBandsRow">
+    <var name="id" type="string" />
+    <var name="dungeonId" type="string#ref=Dungeons" />
+    <var name="fromFloor" type="int" />
+    <var name="toFloor" type="int" />
+    <var name="themeId" type="string#ref=ThemeCatalog" />
+    <var name="enemyGroupId" type="string#ref=EnemyGroups" />
+    <var name="itemGroupId" type="string#ref=ItemGroups" />
+    <var name="mapProfileOverride" type="string" />
+    <var name="ruleProfileOverride" type="string" />
   </bean>
-  <table name="Themes" value="ThemesRow" input="Themes@game.xlsx" index="position" />
+  <table name="FloorBands" value="FloorBandsRow" input="FloorBands@dungeons.xlsx" index="id" />
+  <bean name="EnemyGroupsRow">
+    <var name="id" type="string" />
+  </bean>
+  <table name="EnemyGroups" value="EnemyGroupsRow" input="EnemyGroups@spawns.xlsx" index="id" />
+  <bean name="EnemySpawnsRow">
+    <var name="groupId" type="string#ref=EnemyGroups" />
+    <var name="id" type="string#ref=Enemies" />
+    <var name="weight" type="double" />
+  </bean>
+  <table name="EnemySpawns" value="EnemySpawnsRow" input="EnemySpawns@spawns.xlsx" mode="list" />
+  <bean name="ItemGroupsRow">
+    <var name="id" type="string" />
+  </bean>
+  <table name="ItemGroups" value="ItemGroupsRow" input="ItemGroups@spawns.xlsx" index="id" />
+  <bean name="ItemSpawnsRow">
+    <var name="groupId" type="string#ref=ItemGroups" />
+    <var name="id" type="string#ref=Items" />
+    <var name="weight" type="double" />
+  </bean>
+  <table name="ItemSpawns" value="ItemSpawnsRow" input="ItemSpawns@spawns.xlsx" mode="list" />
+  <bean name="LocalesRow">
+    <var name="id" type="string" />
+    <var name="name" type="string" />
+    <var name="isDefault" type="int" />
+  </bean>
+  <table name="Locales" value="LocalesRow" input="Locales@texts.xlsx" index="id" />
+  <bean name="TextKeysRow">
+    <var name="key" type="string" />
+    <var name="context" type="string" />
+  </bean>
+  <table name="TextKeys" value="TextKeysRow" input="TextKeys@texts.xlsx" index="key" />
+  <bean name="TranslationsRow">
+    <var name="key" type="string#ref=TextKeys" />
+    <var name="locale" type="string#ref=Locales" />
+    <var name="text" type="string" />
+  </bean>
+  <table name="Translations" value="TranslationsRow" input="Translations@texts.xlsx" mode="list" />
 </module>

@@ -26,11 +26,19 @@
     flower: "flower",
     stairs: "stairs",
   };
+  // New content uses its stable catalog ID as the filename. Display names and
+  // behavior templates never choose artwork; only legacy aliases remain above.
+  const catalogEnemies = MD.config.enemies;
+  const catalogItems = MD.config.items;
+  const catalogNames = [...Object.keys(catalogEnemies), ...Object.keys(catalogItems)];
+  for (const id of catalogNames) {
+    if (!Object.prototype.hasOwnProperty.call(FILE_MAP, id)) FILE_MAP[id] = id;
+  }
 
-  const cacheCanvas = {};
-  const cacheTex = {};
-  const imageCache = {}; // name → HTMLImageElement | false (failed)
-  const waiters = {}; // name → [resolve]
+  const cacheCanvas = Object.create(null);
+  const cacheTex = Object.create(null);
+  const imageCache = Object.create(null); // name → HTMLImageElement | false (failed)
+  const waiters = Object.create(null); // name → [resolve]
   let preloadPromise = null;
 
   function makeCanvas(w, h) {
@@ -532,7 +540,7 @@
   };
 
   function fileStem(name) {
-    return FILE_MAP[name] || name;
+    return Object.prototype.hasOwnProperty.call(FILE_MAP, name) ? FILE_MAP[name] : name;
   }
 
   function notifyWaiters(name, img) {
@@ -631,7 +639,11 @@
       return c;
     }
     if (cacheCanvas[name] && !cacheCanvas[name].__fromImg) return cacheCanvas[name];
-    const fn = PAINTERS[name];
+    // Every catalog entry gets a stable placeholder texture while its own PNG
+    // loads (or if it cannot load), rather than an untextured magenta billboard.
+    const fn = Object.prototype.hasOwnProperty.call(PAINTERS, name) ? PAINTERS[name]
+      : Object.prototype.hasOwnProperty.call(catalogEnemies, name) ? paintSlime
+      : Object.prototype.hasOwnProperty.call(catalogItems, name) ? paintRock : null;
     if (!fn) return null;
     cacheCanvas[name] = fn();
     return cacheCanvas[name];
@@ -662,20 +674,23 @@
   }
 
   function worldSize(name) {
-    return WORLD[name] || { w: 0.5, h: 0.5 };
+    if (Object.prototype.hasOwnProperty.call(WORLD, name)) return WORLD[name];
+    return Object.prototype.hasOwnProperty.call(catalogEnemies, name)
+      ? { w: 0.68, h: 0.68 } : { w: 0.5, h: 0.5 };
   }
 
+  const preloadNames = Array.from(new Set([...Object.keys(PAINTERS), ...catalogNames]));
   function preload(names) {
-    const list = names || Object.keys(PAINTERS);
+    if (names) return Promise.all(names.map(whenImage)).then(function () { return true; });
     if (preloadPromise) return preloadPromise;
-    preloadPromise = Promise.all(list.map(function (n) { return whenImage(n); })).then(function () {
+    preloadPromise = Promise.all(preloadNames.map(function (n) { return whenImage(n); })).then(function () {
       return true;
     });
     return preloadPromise;
   }
 
   // Kick off loads immediately so PNGs are often ready by view3d.init
-  Object.keys(PAINTERS).forEach(beginLoad);
+  preloadNames.forEach(beginLoad);
 
   /* ---------- 8-dir player atlases (768x512, 8 cols x 4 rows) ---------- */
   const PLAYER_ANIMS = ["idle", "walk", "run", "attack", "defend", "climb", "fail"];
