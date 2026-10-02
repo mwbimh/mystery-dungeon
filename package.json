@@ -11,7 +11,8 @@
     "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "check": "npm run config && npm run check:syntax && npm test && npm run test:python",
     "build": "python3 tools/build.py",
-    "test:browser": "node --test tests/browser.test.cjs"
+    "test:browser": "node --test tests/browser.test.cjs",
+    "test:browser:stable": "npm run test:browser && npm run test:browser"
   },
   "devDependencies": {
     "playwright": "1.58.2"

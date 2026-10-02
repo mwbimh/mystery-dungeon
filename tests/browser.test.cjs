@@ -51,12 +51,22 @@ async function loaded(page, query = '?flat=1', enterJourney = true) {
   await page.goto(base + '/index.html' + query);
   await readyMenu(page);
   if (!enterJourney || await page.evaluate(() => !!MD.preview)) return;
-  if (await page.locator('#menuContinue').isEnabled()) await page.locator('#menuContinue').click();
+  if (await page.locator('#menuContinue').isEnabled()) await menuClick(page, '#menuContinue');
   else {
-    await page.locator('#menuNew').click();
+    await menuClick(page, '#menuNew');
     await page.locator('button[data-slot="1"][data-action="new"]').click();
   }
   await page.waitForFunction(() => MDMenu.activeSlot && !MD.session.isPaused());
+}
+async function menuIdle(page) {
+  await page.waitForFunction(() => !document.getElementById('menuScreen').hasAttribute('aria-busy'));
+}
+async function menuClick(page, selector) {
+  await menuIdle(page);
+  await page.locator(selector).click();
+  // All shell actions set aria-busy synchronously, then clear it only after
+  // queued saves, IndexedDB reads and the resulting DOM render are settled.
+  await menuIdle(page);
 }
 async function savedSnapshot(page) {
   return page.evaluate(() => ({ ...MD.session.snapshot(), playTimeMs: 0 }));
@@ -213,7 +223,7 @@ test('second workbook dungeon selects, persists, renders variant assets and comp
     await page.locator('#dungeonSelect').selectOption('trainingGrove');
     await page.evaluate(() => MDMenu.save(true));
     assert.equal(await page.evaluate(async () => (await MDMenu.store.read(1)).snapshot.dungeonId), 'trainingGrove');
-    await page.reload(); await readyMenu(page); await page.locator('#menuContinue').click();
+    await page.reload(); await readyMenu(page); await menuClick(page, '#menuContinue');
     await page.waitForFunction(() => !MD.session.isPaused());
     assert.equal(await page.locator('#dungeonSelect').inputValue(),'trainingGrove');
     await page.locator('#btnNewRun').click();
@@ -260,14 +270,14 @@ test('OP skip reaches the four-part main menu without starting hidden gameplay',
     assert.equal(await page.locator('#menuContinue').isDisabled(), true);
     assert.equal(await page.locator('#openingScreen').count(), 0);
     assert.deepEqual(await page.evaluate(() => ({ mode: MD_STATE.mode, player: MD_STATE.player, paused: MD.session.isPaused() })), { mode: 'town', player: null, paused: true });
-    await page.locator('#menuNew').click();
+    await menuClick(page, '#menuNew');
     assert.equal(await page.locator('.save-card').count(), 10);
     await page.locator('button[data-slot="1"][data-action="new"]').dblclick();
     await page.waitForFunction(() => MDMenu.activeSlot === 1 && !MD.session.isPaused());
     assert.equal(await page.evaluate(async () => (await MDMenu.store.list()).filter(row => row.status === 'ready').length), 1);
     assert.deepEqual(errors, []);
     fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
-    await page.locator('#btnSessionMenu').click();
+    await menuClick(page, '#btnSessionMenu');
     await page.screenshot({ path: path.join(ROOT, 'test-results/save-start-menu.png'), fullPage: true });
   } finally { await context.close(); }
 });
@@ -279,20 +289,20 @@ test('native IndexedDB resumes both dungeons after reload and keeps slots indepe
     assert.equal(await page.evaluate(() => MDMenu.store.status.kind), 'indexeddb');
     await page.locator('#dungeonSelect').selectOption('trainingGrove'); await page.locator('#btnNewRun').click();
     await page.keyboard.press('Space');
-    await page.locator('#btnSessionMenu').click();
+    await menuClick(page, '#btnSessionMenu');
     const first = await savedSnapshot(page);
-    await page.reload(); await readyMenu(page); await page.locator('#menuContinue').click();
+    await page.reload(); await readyMenu(page); await menuClick(page, '#menuContinue');
     await page.waitForFunction(() => MDMenu.activeSlot === 1 && !MD.session.isPaused());
     assert.deepEqual(await savedSnapshot(page), first);
-    await page.locator('#btnSessionMenu').click(); await page.locator('#menuNew').click();
+    await menuClick(page, '#btnSessionMenu'); await menuClick(page, '#menuNew');
     await page.locator('button[data-slot="2"][data-action="new"]').click();
     await page.waitForFunction(() => MDMenu.activeSlot === 2 && !MD.session.isPaused());
     assert.equal(await page.evaluate(() => MD_STATE.warehouse.length), 0);
     await page.locator('#btnNewRun').click();
     assert.equal(await page.evaluate(() => MD_STATE.dungeonId), 'original');
-    await page.locator('#btnSessionMenu').click();
+    await menuClick(page, '#btnSessionMenu');
     assert.equal(await page.locator('#menuContinue').isEnabled(), true);
-    await page.locator('#menuLoad').click(); await page.locator('button[data-slot="1"][data-action="load"]').click();
+    await menuClick(page, '#menuLoad'); await page.locator('button[data-slot="1"][data-action="load"]').click();
     await page.waitForFunction(() => MDMenu.activeSlot === 1 && !MD.session.isPaused());
     assert.deepEqual(await savedSnapshot(page), first);
   } finally { await context.close(); }
@@ -304,13 +314,14 @@ test('download current journey then upload into another slot resumes the complet
     await loaded(page, '?flat=1&debug=1');
     await page.locator('#dungeonSelect').selectOption('trainingGrove'); await page.locator('#btnNewRun').click();
     await page.evaluate(() => { MD.debugFloor(2); MD_STATE.bag[0] = MD.makeItem('knockStaff'); MD_STATE.warehouse.push(MD.makeItem('onigiri')); MD.unlockSkillSlot('active'); });
-    await page.keyboard.press('Space'); await page.locator('#btnSessionMenu').click();
+    await page.keyboard.press('Space'); await menuClick(page, '#btnSessionMenu');
     const expected = await savedSnapshot(page);
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载当前进度', exact: true }).click()]);
     const file = await download.path();
     assert.ok(file); const bytes = fs.readFileSync(file);
     assert.equal(JSON.parse(bytes).format, 'mystery-dungeon-save');
-    await page.locator('#menuLoad').click();
+    await menuClick(page, '#menuLoad');
+    await menuIdle(page);
     const chooserEvent = page.waitForEvent('filechooser');
     await page.locator('button[data-slot="2"][data-action="import"]').click();
     const chooser = await chooserEvent;
@@ -319,7 +330,7 @@ test('download current journey then upload into another slot resumes the complet
     await page.waitForFunction(() => MDMenu.activeSlot === 2 && !MD.session.isPaused());
     assert.deepEqual(await savedSnapshot(page), expected);
     assert.deepEqual(await page.evaluate(async () => ({ ...(await MDMenu.store.read(1)).snapshot, playTimeMs: 0 })), expected);
-    await page.reload(); await readyMenu(page); await page.locator('#menuContinue').click();
+    await page.reload(); await readyMenu(page); await menuClick(page, '#menuContinue');
     await page.waitForFunction(() => !MD.session.isPaused());
     assert.deepEqual(await savedSnapshot(page), expected);
   } finally { await context.close(); }
@@ -329,15 +340,18 @@ test('wrong files and cancelled overwrite never replace an occupied slot', async
   const context = await browser.newContext({ reducedMotion: 'reduce' }), page = await context.newPage();
   try {
     await loaded(page); await page.locator('#btnNewRun').click(); await page.keyboard.press('Space');
-    await page.locator('#btnSessionMenu').click(); const expected = await savedSnapshot(page);
-    await page.locator('#menuLoad').click();
+    await menuClick(page, '#btnSessionMenu'); const expected = await savedSnapshot(page);
+    await menuClick(page, '#menuLoad');
     for (const [name, buffer] of [['picture.png', Buffer.from([137, 80, 78, 71])], ['bad.json', Buffer.from('{')]]) {
+      await menuIdle(page);
       const chooserEvent = page.waitForEvent('filechooser'); await page.locator('button[data-slot="1"][data-action="import"]').click();
       await (await chooserEvent).setFiles({ name, mimeType: name.endsWith('png') ? 'image/png' : 'application/json', buffer });
+      await menuIdle(page);
       await page.waitForFunction(() => document.getElementById('menuNotice').classList.contains('is-error'));
       assert.deepEqual(await savedSnapshot(page), expected);
     }
     const text = await page.evaluate(() => MDMenu.store.exportSlot(1));
+    await menuIdle(page);
     const chooserEvent = page.waitForEvent('filechooser'); await page.locator('button[data-slot="1"][data-action="import"]').click();
     const dialogEvent = page.waitForEvent('dialog');
     await (await chooserEvent).setFiles({ name: 'valid.json', mimeType: 'application/json', buffer: Buffer.from(text) });
@@ -353,10 +367,10 @@ test('settings persist across reload; reduced motion and failed OP art still rea
   try {
     await loaded(page, '?flat=1', false);
     assert.equal(await page.locator('#openingScreen').count(), 0);
-    await page.locator('#menuSettings').click();
+    await menuClick(page, '#menuSettings');
     await page.locator('#setting-playOpening').uncheck(); await page.locator('#setting-reducedMotion').check();
     await page.locator('#setting-renderer').selectOption('flat');
-    await page.reload(); await readyMenu(page); await page.locator('#menuSettings').click();
+    await page.reload(); await readyMenu(page); await menuClick(page, '#menuSettings');
     assert.equal(await page.locator('#setting-playOpening').isChecked(), false);
     assert.equal(await page.locator('#setting-reducedMotion').isChecked(), true);
     assert.equal(await page.locator('#setting-renderer').inputValue(), 'flat');
@@ -380,6 +394,12 @@ test('OP scenes and narrow-screen title render before the main menu', async () =
     await page.locator('#openingScreen[data-scene="passage"]').waitFor();
     await page.screenshot({ path: path.join(ROOT, 'test-results/opening-passage.png'), fullPage: true });
     await page.locator('#openingScreen[data-scene="title"]').waitFor();
+    // A scene change starts a crossfade; inspect the finished composition rather
+    // than a frame where the previous shot and transparent title overlap.
+    await page.waitForFunction(() => ['.md-opening-title', '.md-opening-portrait', '.md-opening-lockup'].every(selector => {
+      const node = document.querySelector(selector);
+      return node && Number(getComputedStyle(node).opacity) >= 0.99;
+    }));
     await page.screenshot({ path: path.join(ROOT, 'test-results/opening-title.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(ROOT, 'test-results/opening-title-mobile.png'), fullPage: true });
@@ -397,7 +417,7 @@ test('unavailable IndexedDB honestly warns about volatile saving and remains pla
     assert.equal(await page.evaluate(() => MDMenu.store.status.persistent), false);
     assert.match(await page.locator('#saveStatus').textContent(), /仅本次|下载/);
     await page.locator('#btnNewRun').click(); await page.keyboard.press('Space');
-    await page.locator('#btnSessionMenu').click();
+    await menuClick(page, '#btnSessionMenu');
     assert.equal(await page.getByRole('button', { name: '下载当前进度', exact: true }).isVisible(), true);
     assert.match(await page.locator('.menu-storage-note').textContent(), /刷新或关闭会丢失/);
   } finally { await context.close(); }
@@ -415,7 +435,7 @@ test('two live tabs cannot silently overwrite each other and stale progress rema
     assert.equal(conflict, 'CONFLICT');
     assert.match(await second.locator('#saveStatus').textContent(), /保存失败/);
     assert.deepEqual(await first.evaluate(async () => ({ ...(await MDMenu.store.read(1)).snapshot, playTimeMs: 0 })), latest);
-    await second.locator('#btnSessionMenu').click();
+    await menuClick(second, '#btnSessionMenu');
     // Opening the shell awaits the queued save and IndexedDB slot listing.
     // click() dispatching is not evidence that this asynchronous render finished.
     await second.getByRole('button', { name: '下载当前进度', exact: true }).waitFor({ state: 'visible' });
@@ -430,16 +450,16 @@ test('default renderer can autosave a rendered dungeon and reload it without ren
     await loaded(page, '?debug=1');
     await page.locator('#btnNewRun').click();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await page.locator('#btnSessionMenu').click();
+    await menuClick(page, '#btnSessionMenu');
     const expected = await savedSnapshot(page);
     assert.equal(Object.hasOwn(expected.player, '_vid'), false);
     assert.equal(expected.enemies.some(actor => Object.hasOwn(actor, '_vid')), false);
     assert.equal(await page.evaluate(async () => (await MDMenu.store.list())[0].status), 'ready');
     fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
-    await page.locator('#menuResume').click();
+    await menuClick(page, '#menuResume');
     await page.screenshot({ path: path.join(ROOT, 'test-results/save-default-renderer.png'), fullPage: true });
-    await page.locator('#btnSessionMenu').click();
-    await page.reload(); await readyMenu(page); await page.locator('#menuContinue').click();
+    await menuClick(page, '#btnSessionMenu');
+    await page.reload(); await readyMenu(page); await menuClick(page, '#menuContinue');
     await page.waitForFunction(() => MDMenu.activeSlot === 1 && !MD.session.isPaused());
     assert.deepEqual(await savedSnapshot(page), expected);
     assert.deepEqual(errors, []);

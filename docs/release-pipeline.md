@@ -2,8 +2,8 @@
 
 ## 分支与人工关卡
 
-1. 日常开发和六本领域 Excel（`rules / monsters / items / dungeons / spawns / texts.xlsx`）调整提交到 `design`。
-2. 开 `design → preview` PR；`Release route` 与 `Validate workbook and game` 必须通过。检查包含工作簿结构/值/引用、本地化、固定 SHA-256 的 Luban 5.1.0、生成 JSON、语法、资源、单元与 Chromium 测试。
+1. 日常开发和六本领域 Excel（`rules / monsters / items / dungeons / spawns / texts.xlsx`）调整提交到 `design`，**暂不开 PR**。`design` push 触发与 PR 相同的完整构建、156+ 项 Node / Python 回归及真实 Chromium 套件（连续运行两次）；先等具体 SHA 全部通过，再下载截图检查菜单、OP 桌面/手机与默认渲染效果。发现失败先在 design 修复和完整复测。
+2. 只有上述分支 CI 与视觉检查完成后才开 `design → preview` 草稿 PR，在描述中记录已验证的精确 SHA、运行链接和覆盖范围；`Release route` 与 `Validate workbook and game` 必须通过。检查包含工作簿结构/值/引用、本地化、固定 SHA-256 的 Luban 5.1.0、生成 JSON、语法、资源、单元与 Chromium 测试（连续两遍，任一遍失败都阻止产物通过）。
 3. 合并到 `preview` 后，同一提交再次构建并保存静态产物。通过已授权的 Sites 发布流程更新私有预览，核对实际部署 SHA，并执行试玩验收。
 4. **只有人确认该预览提交可发布后**，才开 `preview → main` PR。PR 描述记录被验收的 SHA、私有预览入口、CI 运行链接及验收结果。预览有新提交时，旧确认不覆盖新内容。
 5. 通过 PR 检查并获准合并后，按现有仓库规则 **Squash and merge** 到 `main`。合并触发全量检查、重建和 GitHub Pages 自动发布；自动化不能把 CI 通过当作人工确认。
@@ -15,7 +15,7 @@
 
 工作流：`.github/workflows/config.yml`（`Validate and release`）。
 
-- 触发：目标为 `preview`/`main` 的 PR，以及这两个分支的 push。PR 路径检查只接受同仓库的 `design → preview` 与 `preview → main`。
+- 触发：目标为 `preview`/`main` 的 PR，以及`design` / `preview` / `main` 的 push。无需先开 PR 就可在 design 上完整验证；design 不会部署 Pages。PR 路径检查只接受同仓库的 `design → preview` 与 `preview → main`。
 - 普通检查权限只有 `contents: read`，checkout 不保留凭据；构建 checkout 开启 Git LFS。
 - Python 3.12、Node 22、.NET SDK 8.0.408；Python 依赖锁定版本、npm 使用锁文件。Luban 安装器锁定 5.1.0 并验证官方归档 SHA-256；缺工具或校验失败直接终止，不使用替代导出器。
 - 产物 `mystery-dungeon-static-<sha>` 保留 14 天，只含 `dist/`。构建失败不上传成功产物，不部署。
@@ -23,7 +23,7 @@
 - Pages job 依赖验证完成，并独占 `pages: write` / `id-token: write` 权限及 `github-pages` 环境；不创建 PAT、部署密钥或机器账号。部署采用官方 `configure-pages`、`upload-pages-artifact`、`deploy-pages` actions。
 - PR/preview 的新构建取消同分支旧构建；main 发布不取消正在进行的运行，Pages 部署串行。
 
-本地重现：按 [Excel 工作流](excel-workflow.md) 安装工具，再依次执行 `npm ci`、`npm run check`、`npm run build`、`npm run test:browser`。CI 完成测试后才运行 `python tools/write_build_info.py`，避免浏览器测试重新构建时清除元数据。
+本地重现：按 [Excel 工作流](excel-workflow.md) 安装工具，再依次执行 `npm ci`、`npm run check`、`npm run build`、`npm run test:browser:stable`。菜单等待应依据 aria-busy 与真实 DOM/存储完成条件，OP 截图等待实际淡入完成，不得用固定 sleep、删断言或跳过用例掩盖竞态。CI 完成测试后才运行 `python tools/write_build_info.py`，避免浏览器测试重新构建时清除元数据。
 
 ## GitHub Pages 一次性配置与首次上线
 
@@ -54,7 +54,7 @@ GitHub Actions 已负责合并 preview 后的构建、校验和可追溯产物�
 
 ## Excel 与 Git LFS
 
-`config/rules.xlsx`、`monsters.xlsx`、`items.xlsx`、`dungeons.xlsx`、`spawns.xlsx`、`texts.xlsx` 是普通 Git 二进制 blob。`.gitattributes` 仅为这六个精确路径排除 LFS，二进制合并继续禁用；旧 `config/game.xlsx` 已移除，其例外规则也移除。仅另为 `tests/fixtures/player-hp47-rules.xlsx` 这个隔离测试工作簿设置普通 Git blob；其他 Excel 和全部媒体保留原 LFS 规则。CI checkout 拉取 LFS，资源测试拒绝把 pointer 文本当 PNG。
+`config/rules.xlsx`、`monsters.xlsx`、`items.xlsx`、`dungeons.xlsx`、`spawns.xlsx`、`texts.xlsx` 是普通 Git 二进制 blob。`.gitattributes` 仅为这六个精确路径排除 LFS，二进制合并继续禁用；旧 `config/game.xlsx` 已移除，其例外规则也移除。仅另为 `tests/fixtures/player-hp47-rules.xlsx` 这个隔离测试工作簿设置普通 Git blob；另对 `assets/runtime/opening/whale-maid.png`（3 MiB 原始立绘）使用精确路径普通 Git 例外；其他 Excel 和媒体保留原 LFS 规则。CI checkout 拉取 LFS，资源测试拒绝把 pointer 文本当 PNG。
 
 六本是需要评审的源表，生成 JSON 不写回分支。发布工具从六本分别记录 SHA-256，版本 2 的 JSON 与浏览器都限 4 MiB；每次构建仍使用实际 Luban，无备用转换器。
 
