@@ -1065,6 +1065,8 @@ button.hud-seal {
    Artwork and hit targets share this canvas, with a separately composed mobile map.
    White cut edges are reserved for interactive stickers; scenery is printed paper. */
 .overlay.town-overlay {
+  /* The fixed save/menu controls keep a dedicated strip, even while the town scrolls. */
+  top: 54px;
   display: block;
   padding: 12px;
   overflow: auto;
@@ -1073,6 +1075,15 @@ button.hud-seal {
   background-image: radial-gradient(ellipse at 15% 0, #eff0da, transparent 55%);
   backdrop-filter: none;
   scrollbar-color: #bcc9b6 #e8ecdc;
+}
+.overlay.town-overlay::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: 54px;
+  background: #dce5d9;
+  border-bottom: 1px solid #c9d3c1;
+  pointer-events: none;
 }
 .overlay.town-overlay.hidden { display: none; }
 .town-map {
@@ -1084,7 +1095,7 @@ button.hud-seal {
   align-items: center;
   gap: 14px;
   width: min(1240px, 100%);
-  min-height: calc(100dvh - 24px);
+  min-height: calc(100dvh - 78px);
   margin: 0 auto;
   padding: 18px 22px 17px;
   border: 1px solid #fdfaf0;
@@ -1135,7 +1146,7 @@ button.hud-seal {
 .town-scene {
   position: relative;
   isolation: isolate;
-  width: min(100%, max(760px, calc((100dvh - 218px) * 1.81818)));
+  width: min(100%, max(760px, calc((100dvh - 272px) * 1.81818)));
   flex: 0 0 auto;
   aspect-ratio: 1200 / 660;
   border-radius: 18px 25px 19px 22px;
@@ -1169,6 +1180,7 @@ button.hud-seal {
   border: 0;
   outline: none;
   border-radius: 42%;
+  box-shadow: none; /* Do not inherit the global green button underline. */
   background: transparent;
   padding: 0;
   color: var(--town-ink);
@@ -1265,7 +1277,7 @@ button.hud-seal {
 }
 @media (max-width: 680px) {
   .overlay.town-overlay { padding: 0; }
-  .town-map { min-height: 100dvh; padding: max(12px, env(safe-area-inset-top)) 10px max(16px, env(safe-area-inset-bottom)); gap: 12px; border: 0; border-radius: 0; }
+  .town-map { min-height: calc(100dvh - 54px); padding: max(12px, env(safe-area-inset-top)) 10px max(16px, env(safe-area-inset-bottom)); gap: 12px; border: 0; border-radius: 0; }
   .town-heading { padding: 0 3px; gap: 8px; }
   .town-eyebrow { font-size: 7px; letter-spacing: .19em; }
   .town-heading h1 { margin: 3px 0 2px; font-size: 25px; }

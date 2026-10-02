@@ -13,7 +13,8 @@
 }
 .pvn-overlay *, .pvn-overlay *::before, .pvn-overlay *::after { box-sizing:border-box; }
 .pvn-overlay [hidden] { display:none !important; }
-.pvn-overlay button { font:inherit; cursor:pointer; touch-action:manipulation; }
+.pvn-overlay button { font:inherit; cursor:pointer; touch-action:manipulation; box-shadow:none; filter:none; }
+.pvn-overlay button:active { transform:none; }
 .pvn-overlay button:focus-visible { outline:3px solid var(--pvn-accent); outline-offset:4px; }
 .pvn-stage { position:relative; display:flex; align-items:flex-end; width:min(1100px,100%); gap:0; }
 .pvn-portrait { position:relative; flex:0 0 30%; height:min(470px,63vh); align-self:flex-end; z-index:2; pointer-events:none; }

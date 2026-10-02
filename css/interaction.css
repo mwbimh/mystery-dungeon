@@ -16,6 +16,7 @@ body.town-panel-open #townOverlay::after {
 }
 body.game-modal-open .session-controls { visibility: hidden; }
 #helpOverlay, #endOverlay { z-index: 100; }
+#aimHint.hidden { display: none; }
 .slot:focus-visible { outline: 3px solid #618473; outline-offset: 2px; }
 @media (max-width: 580px) {
   body.town-panel-open #hudInv { width: calc(100vw - 28px); flex-direction: column; max-height: 77vh; overflow: auto; }

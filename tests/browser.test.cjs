@@ -508,6 +508,7 @@ test('paper town preserves native keyboard navigation and opens six distinct reu
     for (const id of ['stickerChatgpt', 'stickerClaude', 'stickerKimi', 'stickerGlm', 'stickerHarness', 'stickerDeepseek']) {
       await page.locator('#' + id).focus(); await page.keyboard.press('Enter');
       await page.locator('.pvn-overlay').waitFor();
+      assert.equal(await page.locator('.pvn-choice').first().evaluate(node => getComputedStyle(node).boxShadow), 'none');
       assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
       assert.equal(await page.evaluate(() => document.querySelector('.pvn-overlay').contains(document.activeElement)), true);
       scenes.add(await page.locator('.pvn-text').textContent());
@@ -521,6 +522,7 @@ test('paper town preserves native keyboard navigation and opens six distinct reu
       assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
     }
     assert.equal(scenes.size, 6);
+    assert.equal(await page.locator('#stickerChatgpt').evaluate(node => getComputedStyle(node).boxShadow), 'none');
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
@@ -534,6 +536,7 @@ test('town inventory keeps its paper background; dialogue action opens warehouse
     assert.equal(await page.evaluate(() => MD_STATE.invOpen), true);
     assert.equal(await page.locator('#townOverlay').isVisible(), true);
     assert.equal(await page.locator('#hudInv').isVisible(), true);
+    assert.equal(await page.locator('#aimHint').isVisible(), false);
     assert.equal(await page.evaluate(() => document.getElementById('hudInv').parentElement === document.body), true);
     assert.equal(await page.evaluate(() => {
       const panel = document.getElementById('hudInv'), r = panel.getBoundingClientRect();
@@ -672,9 +675,10 @@ test('paper town five-size layout keeps the background registered and all seven 
         const town = document.getElementById('townOverlay');
         return { scene:rect(document.querySelector('.town-scene')), image:rect(document.querySelector('.town-map-bg')),
           overflow:town.scrollWidth > town.clientWidth, targets:[...document.querySelectorAll('.town-sticker')].map(node => ({id:node.id,...rect(node)})),
-          choice:rect(document.querySelector('.dungeon-choice')) };
+          choice:rect(document.querySelector('.dungeon-choice')), heading:rect(document.querySelector('.town-heading')), session:rect(document.querySelector('.session-controls')) };
       });
       assert.equal(layout.overflow, false, name + ' horizontal overflow');
+      assert.ok(layout.session.y + layout.session.height <= layout.heading.y || layout.session.x >= layout.heading.x + layout.heading.width || layout.session.x + layout.session.width <= layout.heading.x, name + ' session bar must not cover town heading or tools');
       for (const prop of ['x','y','width','height']) assert.ok(Math.abs(layout.scene[prop] - layout.image[prop]) < 1, name + ' image registration');
       assert.ok(layout.choice.y >= layout.scene.y + layout.scene.height, name + ' departure cannot cover scene');
       for (let i = 0; i < layout.targets.length; i++) for (let j = i + 1; j < layout.targets.length; j++) {
