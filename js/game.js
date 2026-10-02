@@ -2,8 +2,8 @@
 (function () {
   const MD = window.MD;
   const MAX_BAG = 20;
-  const MAX_MONSTERS = 16;
-  const TOTAL_FLOORS = 24;
+  const MAX_MONSTERS = MD.config.rules.maxMonsters;
+  const TOTAL_FLOORS = MD.config.rules.totalFloors;
   const DEBUG = /(?:\?|&)debug=1(?:&|$)/.test(location.search);
   const ASSET_V = "59";
   const ITEM_ICON = {
@@ -113,7 +113,7 @@
   const SKILL_SLOT_START = { active: 2, passive: 1 };
   function loadSkillMeta() {
     try {
-      const o = JSON.parse(localStorage.getItem("md-skill-meta") || "null");
+      const o = JSON.parse(MD.storage.getItem("md-skill-meta") || "null");
       if (o && typeof o === "object") {
         const a = Math.max(1, Math.min(SKILL_SLOT_MAX.active, o.active | 0));
         const p = Math.max(0, Math.min(SKILL_SLOT_MAX.passive, o.passive | 0));
@@ -125,7 +125,7 @@
   const skillMeta = loadSkillMeta();
   function saveSkillMeta() {
     try {
-      localStorage.setItem("md-skill-meta", JSON.stringify({
+      MD.storage.setItem("md-skill-meta", JSON.stringify({
         active: skillMeta.active,
         passive: skillMeta.passive,
       }));
@@ -343,9 +343,9 @@
         const pre = Math.min(2, Math.floor(area / 12));
         placeEnemies(pre, r.id, true);
         // Extra items in MH
-        placeItems(MD.randInt(4, 7), (rid) => rid === r.id);
+        placeItems(MD.randInt(MD.config.rules.houseItems.min, MD.config.rules.houseItems.max), (rid) => rid === r.id);
       } else {
-        const n = Math.random() < 0.45 ? 1 : 0;
+        const n = MD.random() < MD.config.rules.roomEnemyChance ? 1 : 0;
         if (n) placeEnemies(n, r.id, false);
       }
     }
@@ -357,7 +357,7 @@
     }
 
     // Normal floor items
-    placeItems(MD.randInt(3, 6), (rid) => rid !== state.map.spawnRoomId);
+    placeItems(MD.randInt(MD.config.rules.floorItems.min, MD.config.rules.floorItems.max), (rid) => rid !== state.map.spawnRoomId);
 
     // Ensure spawn tile clear of enemies/items
     state.enemies = state.enemies.filter((e) => !(e.x === spawn.x && e.y === spawn.y));
@@ -543,13 +543,13 @@
     state.turn += 1;
     state.spawnCounter += 1;
 
-    // belly every 10 turns
-    if (state.turn % 10 === 0) {
+    // Hunger interval comes from workbook.
+    if (state.turn % MD.config.rules.hungerEvery === 0) {
       if (p.belly > 0) p.belly -= 1;
     }
     if (p.belly <= 0) {
       p.belly = 0;
-      p.hp -= 1;
+      p.hp -= MD.config.rules.starvationDamage;
       if (state.turn % 1 === 0) {
         // log occasionally
         if (state.turn % 3 === 0) log("饿了。", "bad");
@@ -559,8 +559,8 @@
         return;
       }
     } else {
-      // regen every 8 turns if not just entered MH
-      if (!state.justEnteredMH && state.turn % 8 === 0 && p.hp < p.maxHp) {
+      // Configured regeneration interval, unless just entered a monster house.
+      if (!state.justEnteredMH && state.turn % MD.config.rules.regenEvery === 0 && p.hp < p.maxHp) {
         p.hp += 1;
       }
     }
@@ -578,7 +578,7 @@
   }
 
   function spawnWanderer() {
-    if (state.spawnCounter < 55) return;
+    if (state.spawnCounter < MD.config.rules.wandererEvery) return;
     state.spawnCounter = 0;
     const alive = state.enemies.filter((e) => e.alive).length;
     if (alive >= MAX_MONSTERS) return;
@@ -815,8 +815,8 @@
           }
         }
       } else {
-        // wander 30%
-        if (Math.random() < 0.3) {
+        // Configured idle movement chance.
+        if (MD.random() < MD.config.rules.idleMoveChance) {
           const step = MD.randomDirStep(state.map, allActors(), e);
           if (step) {
             if (MD.setFacing) MD.setFacing(e, step.x - e.x, step.y - e.y);
@@ -834,17 +834,17 @@
     const item = state.bag[index];
     if (!item) return;
     if (item.type === "onigiri") {
-      applyFood(50);
+      applyFood(MD.config.effects.smallFood);
       bagClear(index);
-      log("吃了饭团。", "good");
+      log("吃了" + MD.ITEM_DEFS.onigiri.name + "。", "good");
     } else if (item.type === "bigOnigiri") {
-      applyFood(100);
+      applyFood(MD.config.effects.bigFood);
       bagClear(index);
-      log("吃了大饭团。", "good");
+      log("吃了" + MD.ITEM_DEFS.bigOnigiri.name + "。", "good");
     } else if (item.type === "sleepHerb") {
       bagClear(index);
-      MD.addStatus(state.player, "sleep", MD.randInt(4, 6));
-      log("吃了睡眠草……睡着了。", "warn");
+      MD.addStatus(state.player, "sleep", MD.randInt(MD.config.effects.sleepTurns.min, MD.config.effects.sleepTurns.max));
+      log("吃了" + MD.ITEM_DEFS.sleepHerb.name + "……睡着了。", "warn");
     } else {
       log("这个不能吃。");
       return;
@@ -856,14 +856,14 @@
   function applyFood(amount) {
     const p = state.player;
     if (p.belly >= p.maxBelly) {
-      if (p.maxBelly < 200) {
-        p.maxBelly = Math.min(200, p.maxBelly + 5);
+      if (p.maxBelly < MD.config.effects.bellyCap) {
+        p.maxBelly = Math.min(MD.config.effects.bellyCap, p.maxBelly + MD.config.effects.bellyGrowth);
         log("最大饱食度上升了！", "good");
       }
       p.belly = p.maxBelly;
     } else {
       p.belly = Math.min(p.maxBelly, p.belly + amount);
-      if (p.belly >= p.maxBelly && p.maxBelly < 200 && amount >= 100) {
+      if (p.belly >= p.maxBelly && p.maxBelly < MD.config.effects.bellyCap && amount >= 100) {
         // big fill while nearly full — optional raise handled when already full
       }
     }
@@ -941,7 +941,7 @@
   }
 
   function doThrow(item, src, dx, dy) {
-    const range = item.type === "knockStaff" ? 10 : 8;
+    const range = item.type === "knockStaff" ? MD.config.effects.staffThrowRange : MD.config.effects.throwRange;
     const path = rayCast(state.player.x, state.player.y, dx, dy, range);
     consumeFrom(src);
 
@@ -956,25 +956,25 @@
 
     if (item.type === "rock") {
       if (hit) {
-        log("石头击中了" + hit.name + "！");
-        applyDamage(hit, 8, "rock");
+        log(MD.ITEM_DEFS.rock.name + "击中了" + hit.name + "！");
+        applyDamage(hit, MD.config.effects.rockDamage, "rock");
       } else {
-        log("石头落在了地上。");
+        log(MD.ITEM_DEFS.rock.name + "落在了地上。");
         // leave rock on floor
         state.items.push({ ...MD.makeItem("rock"), x: last.x, y: last.y });
       }
     } else if (item.type === "sleepHerb") {
       if (hit) {
-        MD.addStatus(hit, "sleep", MD.randInt(4, 6));
-        log("睡眠草击中了" + hit.name + "！", "good");
+        MD.addStatus(hit, "sleep", MD.randInt(MD.config.effects.sleepTurns.min, MD.config.effects.sleepTurns.max));
+        log(MD.ITEM_DEFS.sleepHerb.name + "击中了" + hit.name + "！", "good");
       } else {
         state.items.push({ ...MD.makeItem("sleepHerb"), x: last.x, y: last.y });
-        log("睡眠草落在了地上。");
+        log(MD.ITEM_DEFS.sleepHerb.name + "落在了地上。");
       }
     } else if (item.type === "onigiri" || item.type === "bigOnigiri") {
       if (hit) {
-        log(MD.displayName(item) + "砸中了" + hit.name + "（1）。");
-        applyDamage(hit, 1, "food");
+        log(MD.displayName(item) + "砸中了" + hit.name + "（" + MD.config.effects.foodDamage + "）。");
+        applyDamage(hit, MD.config.effects.foodDamage, "food");
       } else {
         state.items.push({ ...MD.makeItem(item.type), x: last.x, y: last.y });
         log(MD.displayName(item) + "落在了地上。");
@@ -982,10 +982,10 @@
     } else if (item.type === "knockStaff") {
       // throw staff: knock once and destroy
       if (hit) {
-        log("扔出的击退之杖击中了" + hit.name + "！", "good");
+        log("扔出的" + MD.ITEM_DEFS.knockStaff.name + "击中了" + hit.name + "！", "good");
         knockback(hit, dx, dy);
       } else {
-        log("击退之杖摔碎了。");
+        log(MD.ITEM_DEFS.knockStaff.name + "摔碎了。");
       }
     }
     afterItemUseTurn();
@@ -999,15 +999,15 @@
       return;
     }
     item.charges -= 1;
-    item.name = "击退之杖 [" + item.charges + "]";
+    item.name = MD.ITEM_DEFS.knockStaff.name + " [" + item.charges + "]";
     if (src && src.place === "skill" && item.charges <= 0) {
       consumeFrom(src);
     } else {
       writeBackItem(src, item);
     }
 
-    // infinite range bolt
-    const path = rayCast(state.player.x, state.player.y, dx, dy, 100);
+    // Configured bolt range.
+    const path = rayCast(state.player.x, state.player.y, dx, dy, MD.config.effects.staffRange);
     if (!path.length) {
       log("挥空了。");
       afterItemUseTurn();
@@ -1016,7 +1016,7 @@
     const last = path[path.length - 1];
     const hit = actorAt(last.x, last.y);
     if (hit) {
-      log("击退之杖命中了" + hit.name + "！", "good");
+      log(MD.ITEM_DEFS.knockStaff.name + "命中了" + hit.name + "！", "good");
       knockback(hit, dx, dy);
     } else {
       log("杖光消失在远处。");
@@ -1029,8 +1029,8 @@
     let guard = 0;
     while (guard++ < 100) {
       if (!MD.canStep(state.map, actor.x, actor.y, dx, dy)) {
-        // hit wall — extra 5 dmg
-        applyDamage(actor, 5, "wall");
+        // Configured wall impact damage.
+        applyDamage(actor, MD.config.effects.wallDamage, "wall");
         log(actor.name + "撞到了墙！", "warn");
         break;
       }
@@ -1217,7 +1217,7 @@
     if (index < 0 || index >= skillMeta[kind]) return;
     const ok = kind === "active" ? ACTIVE_SKILL_TYPES[item.type] : kind === "passive" ? PASSIVE_SKILL_TYPES[item.type] : false;
     if (!ok) {
-      if (kind === "active") log("主动栏只能放击退之杖或石头。", "warn");
+      if (kind === "active") log("主动栏只能放" + MD.ITEM_DEFS.knockStaff.name + "或" + MD.ITEM_DEFS.rock.name + "。", "warn");
       else log("被动技能还没开放。", "warn");
       updateUI();
       return;
@@ -1942,6 +1942,12 @@
   canvas.focus();
   requestAnimationFrame(frame);
 
+  if (MD.preview) {
+    enterDungeon();
+    if (MD.preview.floor !== 1) setupFloor(MD.preview.floor);
+    updateUI();
+  }
+
   // Expose for debug
   window.MD_STATE = state;
   if (DEBUG) {
@@ -1963,8 +1969,9 @@
       b.addEventListener("click", fn);
       panel.appendChild(b);
     };
-    MD.THEMES.forEach(function (t, i) {
-      mkBtn(t.name, function () { MD.debugFloor(i * MD.FLOORS_PER_THEME + 1); });
+    MD.config.themes.order.forEach(function (id, i) {
+      const t = MD.THEMES.find(theme => theme.id === id);
+      mkBtn(MD.t("theme." + id + ".name"), function () { MD.debugFloor(i * MD.FLOORS_PER_THEME + 1); });
     });
     panel.appendChild(document.createElement("br"));
     mkBtn("← 上一层", function () { MD.debugFloor(state.floor - 1); }, "dbg-btn dbg-small");

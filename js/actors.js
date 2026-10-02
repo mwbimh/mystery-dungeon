@@ -7,20 +7,17 @@
     [-1, -1], [1, -1], [-1, 1], [1, 1],
   ];
 
-  const ENEMY_DEFS = {
-    slime: { id: "slime", name: "史莱姆", color: "#6ee7b7", hp: 6, atk: 3, def: 0, glyph: "史" },
-    bat: { id: "bat", name: "蝙蝠", color: "#c4b5fd", hp: 5, atk: 4, def: 0, glyph: "蝠" },
-    shell: { id: "shell", name: "甲壳", color: "#94a3b8", hp: 12, atk: 5, def: 2, glyph: "甲" },
-  };
+  const ENEMY_DEFS = MD.config.enemies;
+
 
   function makePlayer(x, y) {
     return {
       kind: "player",
       name: "你",
       x, y,
-      hp: 30, maxHp: 30,
-      atk: 7, def: 2,
-      belly: 100, maxBelly: 100,
+      hp: MD.config.player.hp, maxHp: MD.config.player.hp,
+      atk: MD.config.player.atk, def: MD.config.player.def,
+      belly: MD.config.player.belly, maxBelly: MD.config.player.belly,
       statuses: [], // {type, turns}
       alive: true,
       color: "#5eead4",
@@ -33,12 +30,12 @@
 
   function makeEnemy(type, x, y) {
     const d = ENEMY_DEFS[type];
-    const hp = Math.max(1, Math.round(d.hp * 0.85));
-    const atk = Math.max(1, Math.round(d.atk * 0.85));
+    const hp = Math.max(1, Math.round(d.hp * MD.config.rules.enemyScale));
+    const atk = Math.max(1, Math.round(d.atk * MD.config.rules.enemyScale));
     return {
       kind: "enemy",
       type,
-      name: d.name,
+      name: MD.t(d.nameKey),
       x, y,
       hp: hp, maxHp: hp,
       atk: atk, def: d.def,
@@ -52,20 +49,12 @@
   }
 
   function pickEnemyType(floorNum) {
-    if (floorNum >= 4) {
-      const r = Math.random();
-      if (r < 0.55) return "slime";
-      if (r < 0.85) return "bat";
-      return "shell";
-    }
-    if (floorNum >= 2) {
-      return Math.random() < 0.55 ? "slime" : "bat";
-    }
-    return Math.random() < 0.7 ? "slime" : "bat";
+    const group = MD.config.enemySpawns.filter(row => row.fromFloor <= floorNum).at(-1);
+    return MD.weightedPick(group.entries);
   }
 
   function meleeDamage(atk, def) {
-    const roll = MD.randInt(-1, 1);
+    const roll = MD.randInt(MD.config.effects.damageRoll.min, MD.config.effects.damageRoll.max);
     return Math.max(1, atk - def + roll);
   }
 

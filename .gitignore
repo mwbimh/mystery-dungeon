@@ -29,3 +29,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Generated exclusively from config/game.xlsx
+/config/game.json
+/node_modules/
+/dist/
+/.dist-staging/
+/test-results/
+/.tools/

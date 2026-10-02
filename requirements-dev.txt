@@ -1,0 +1,6 @@
+# Excel authoring pipeline only; the browser has no Python dependency.
+openpyxl==3.1.5
+et-xmlfile==2.0.0
+
+# Official Luban release archive extraction.
+py7zr==1.1.3

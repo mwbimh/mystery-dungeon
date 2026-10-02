@@ -1,0 +1,50 @@
+<module name="">
+  <bean name="TextsRow">
+    <var name="key" type="string" />
+    <var name="zhCN" type="string" />
+    <var name="en" type="string" />
+  </bean>
+  <table name="Texts" value="TextsRow" input="Texts@texts.xlsx" index="key" />
+  <bean name="SettingsRow">
+    <var name="path" type="string" />
+    <var name="value" type="double" />
+  </bean>
+  <table name="Settings" value="SettingsRow" input="Settings@game.xlsx" index="path" />
+  <bean name="EnemiesRow">
+    <var name="id" type="string" />
+    <var name="nameKey" type="string#ref=Texts" />
+    <var name="color" type="string" />
+    <var name="hp" type="int#range=[1,10000]" />
+    <var name="atk" type="int#range=[0,1000]" />
+    <var name="def" type="int#range=[0,1000]" />
+    <var name="glyph" type="string" />
+  </bean>
+  <table name="Enemies" value="EnemiesRow" input="Enemies@game.xlsx" index="id" />
+  <bean name="ItemsRow">
+    <var name="id" type="string" />
+    <var name="nameKey" type="string#ref=Texts" />
+    <var name="color" type="string" />
+  </bean>
+  <table name="Items" value="ItemsRow" input="Items@game.xlsx" index="id" />
+  <bean name="EnemySpawnsRow">
+    <var name="fromFloor" type="int#range=[1,240]" />
+    <var name="id" type="string#ref=Enemies" />
+    <var name="weight" type="double#range=[0,100000]" />
+  </bean>
+  <table name="EnemySpawns" value="EnemySpawnsRow" input="EnemySpawns@game.xlsx" mode="list" />
+  <bean name="ItemDropsRow">
+    <var name="id" type="string#ref=Items" />
+    <var name="weight" type="double#range=[0,100000]" />
+  </bean>
+  <table name="ItemDrops" value="ItemDropsRow" input="ItemDrops@game.xlsx" index="id" />
+  <bean name="ThemeCatalogRow">
+    <var name="id" type="string" />
+    <var name="nameKey" type="string#ref=Texts" />
+  </bean>
+  <table name="ThemeCatalog" value="ThemeCatalogRow" input="ThemeCatalog@game.xlsx" index="id" />
+  <bean name="ThemesRow">
+    <var name="position" type="int#range=[1,32]" />
+    <var name="id" type="string#ref=ThemeCatalog" />
+  </bean>
+  <table name="Themes" value="ThemesRow" input="Themes@game.xlsx" index="position" />
+</module>

@@ -163,11 +163,12 @@
     },
   ];
 
-  const FLOORS_PER_THEME = 3;
+  const FLOORS_PER_THEME = MD.config.themes.floorsPerTheme;
 
   function themeForFloor(floor) {
-    const idx = Math.min(THEMES.length - 1, Math.floor((Math.max(1, floor) - 1) / FLOORS_PER_THEME));
-    return THEMES[idx];
+    const idx = Math.min(MD.config.themes.order.length - 1, Math.floor((Math.max(1, floor) - 1) / FLOORS_PER_THEME));
+    const theme = THEMES.find(theme => theme.id === MD.config.themes.order[idx]);
+    return { ...theme, name: MD.t("theme." + theme.id + ".name") };
   }
 
   MD.THEMES = THEMES;

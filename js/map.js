@@ -1,14 +1,15 @@
 /* Map generation for 迷宫 */
 (function (global) {
+  const MD = global.MD;
   const TILE = { WALL: 0, FLOOR: 1, STAIRS: 2 };
 
   function randInt(a, b) {
-    return a + Math.floor(Math.random() * (b - a + 1));
+    return a + Math.floor(MD.random() * (b - a + 1));
   }
 
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(MD.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
@@ -30,7 +31,7 @@
   function carveCorridor(tiles, roomIds, x0, y0, x1, y1) {
     let x = x0, y = y0;
     // L-shaped: horizontal then vertical, or reverse randomly
-    if (Math.random() < 0.5) {
+    if (MD.random() < 0.5) {
       while (x !== x1) {
         tiles[y][x] = TILE.FLOOR;
         if (roomIds[y][x] === undefined || roomIds[y][x] === null) roomIds[y][x] = -1;
@@ -87,8 +88,8 @@
    * @returns {{width,height,tiles,roomIds,rooms,stairs,playerSpawn,monsterHouseRooms}}
    */
   function generateFloor(floorNum) {
-    const width = randInt(50, 60);
-    const height = randInt(30, 36);
+    const width = randInt(MD.config.map.width.min, MD.config.map.width.max);
+    const height = randInt(MD.config.map.height.min, MD.config.map.height.max);
     const tiles = Array.from({ length: height }, () => Array(width).fill(TILE.WALL));
     const roomIds = Array.from({ length: height }, () => Array(width).fill(null));
 
@@ -105,7 +106,7 @@
     const slotPlan = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        slotPlan.push({ r, c, skip: Math.random() < 0.18 });
+        slotPlan.push({ r, c, skip: MD.random() < MD.config.map.skipRoomChance });
       }
     }
     // Guarantee at least 5 rooms
@@ -120,7 +121,7 @@
 
     // Occasional large hall: merge 2 adjacent rooms horizontally
     let hallPair = null;
-    if (Math.random() < 0.28) {
+    if (MD.random() < MD.config.map.hallChance) {
       const candidates = [];
       for (const s of active) {
         const right = active.find((o) => o.r === s.r && o.c === s.c + 1);
@@ -230,7 +231,7 @@
     for (const e of edges) {
       if (added >= extras) break;
       if (used.includes(e)) continue;
-      if (Math.random() < 0.4) {
+      if (MD.random() < MD.config.map.loopChance) {
         carveCorridor(tiles, roomIds, rooms[e.i].cx, rooms[e.i].cy, rooms[e.j].cx, rooms[e.j].cy);
         added++;
       }
@@ -294,8 +295,8 @@
     const monsterHouseRooms = [];
     for (const r of rooms) {
       if (r.id === best.id) continue;
-      const chance = 0.15 + Math.random() * 0.1;
-      if (Math.random() < chance) {
+      const chance = MD.config.map.monsterHouseChance.min + MD.random() * (MD.config.map.monsterHouseChance.max - MD.config.map.monsterHouseChance.min);
+      if (MD.random() < chance) {
         r.isMonsterHouse = true;
         monsterHouseRooms.push(r.id);
       }

@@ -1,0 +1,19 @@
+{
+  "name": "mystery-dungeon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mystery Dungeon with validated Excel configuration",
+  "scripts": {
+    "tools:install": "python3 tools/install_luban.py",
+    "config": "python3 tools/convert_config.py",
+    "check:syntax": "node -e \"const fs=require('node:fs'),cp=require('node:child_process');for(const f of fs.readdirSync('js').filter(f=>f.endsWith('.js')))cp.execFileSync(process.execPath,['--check','js/'+f],{stdio:'inherit'});\"",
+    "test": "node --test tests/baseline.test.cjs tests/config.test.cjs tests/assets.test.cjs",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "check": "npm run config && npm run check:syntax && npm test && npm run test:python",
+    "build": "python3 tools/build.py",
+    "test:browser": "node --test tests/browser.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
+  }
+}

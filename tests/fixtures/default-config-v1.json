@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "player": {
+    "hp": 30,
+    "atk": 7,
+    "def": 2,
+    "belly": 100
+  },
+  "rules": {
+    "totalFloors": 24,
+    "maxMonsters": 16,
+    "enemyScale": 0.85,
+    "hungerEvery": 10,
+    "regenEvery": 8,
+    "starvationDamage": 1,
+    "wandererEvery": 55,
+    "roomEnemyChance": 0.45,
+    "idleMoveChance": 0.3,
+    "floorItems": {
+      "min": 3,
+      "max": 6
+    },
+    "houseItems": {
+      "min": 4,
+      "max": 7
+    }
+  },
+  "map": {
+    "width": {
+      "min": 50,
+      "max": 60
+    },
+    "height": {
+      "min": 30,
+      "max": 36
+    },
+    "skipRoomChance": 0.18,
+    "hallChance": 0.28,
+    "loopChance": 0.4,
+    "monsterHouseChance": {
+      "min": 0.15,
+      "max": 0.25
+    }
+  },
+  "effects": {
+    "smallFood": 50,
+    "bigFood": 100,
+    "bellyCap": 200,
+    "bellyGrowth": 5,
+    "rockDamage": 8,
+    "foodDamage": 1,
+    "wallDamage": 5,
+    "throwRange": 8,
+    "staffThrowRange": 10,
+    "staffRange": 100,
+    "sleepTurns": {
+      "min": 4,
+      "max": 6
+    },
+    "staffCharges": {
+      "min": 4,
+      "max": 6
+    },
+    "damageRoll": {
+      "min": -1,
+      "max": 1
+    }
+  },
+  "enemies": {
+    "slime": {
+      "name": "史莱姆",
+      "color": "#6ee7b7",
+      "hp": 6,
+      "atk": 3,
+      "def": 0,
+      "glyph": "史",
+      "nameKey": "enemy.slime.name"
+    },
+    "bat": {
+      "name": "蝙蝠",
+      "color": "#c4b5fd",
+      "hp": 5,
+      "atk": 4,
+      "def": 0,
+      "glyph": "蝠",
+      "nameKey": "enemy.bat.name"
+    },
+    "shell": {
+      "name": "甲壳",
+      "color": "#94a3b8",
+      "hp": 12,
+      "atk": 5,
+      "def": 2,
+      "glyph": "甲",
+      "nameKey": "enemy.shell.name"
+    }
+  },
+  "items": {
+    "onigiri": {
+      "name": "饭团",
+      "color": "#e8d5a3",
+      "nameKey": "item.onigiri.name"
+    },
+    "bigOnigiri": {
+      "name": "大饭团",
+      "color": "#f5c16c",
+      "nameKey": "item.bigOnigiri.name"
+    },
+    "rock": {
+      "name": "石头",
+      "color": "#9aa4b2",
+      "nameKey": "item.rock.name"
+    },
+    "sleepHerb": {
+      "name": "睡眠草",
+      "color": "#a78bfa",
+      "nameKey": "item.sleepHerb.name"
+    },
+    "knockStaff": {
+      "name": "击退之杖",
+      "color": "#5eead4",
+      "nameKey": "item.knockStaff.name"
+    }
+  },
+  "enemySpawns": [
+    {
+      "fromFloor": 1,
+      "entries": [
+        {
+          "id": "slime",
+          "weight": 0.7
+        },
+        {
+          "id": "bat",
+          "weight": 0.3
+        }
+      ]
+    },
+    {
+      "fromFloor": 2,
+      "entries": [
+        {
+          "id": "slime",
+          "weight": 0.55
+        },
+        {
+          "id": "bat",
+          "weight": 0.45
+        }
+      ]
+    },
+    {
+      "fromFloor": 4,
+      "entries": [
+        {
+          "id": "slime",
+          "weight": 0.55
+        },
+        {
+          "id": "bat",
+          "weight": 0.3
+        },
+        {
+          "id": "shell",
+          "weight": 0.15
+        }
+      ]
+    }
+  ],
+  "itemDrops": [
+    {
+      "id": "onigiri",
+      "weight": 0.38
+    },
+    {
+      "id": "bigOnigiri",
+      "weight": 0.14
+    },
+    {
+      "id": "rock",
+      "weight": 0.26
+    },
+    {
+      "id": "sleepHerb",
+      "weight": 0.12
+    },
+    {
+      "id": "knockStaff",
+      "weight": 0.1
+    }
+  ],
+  "themes": {
+    "floorsPerTheme": 3,
+    "order": [
+      "cave",
+      "forest",
+      "wetcave",
+      "ruins",
+      "wooden",
+      "modern",
+      "cyber",
+      "future"
+    ]
+  },
+  "localization": {
+    "defaultLocale": "zh-CN",
+    "texts": [
+      {
+        "key": "enemy.slime.name",
+        "zhCN": "史莱姆",
+        "en": "Slime"
+      },
+      {
+        "key": "enemy.bat.name",
+        "zhCN": "蝙蝠",
+        "en": "Bat"
+      },
+      {
+        "key": "enemy.shell.name",
+        "zhCN": "甲壳",
+        "en": "Shell"
+      },
+      {
+        "key": "item.onigiri.name",
+        "zhCN": "饭团",
+        "en": "Rice Ball"
+      },
+      {
+        "key": "item.bigOnigiri.name",
+        "zhCN": "大饭团",
+        "en": "Large Rice Ball"
+      },
+      {
+        "key": "item.rock.name",
+        "zhCN": "石头",
+        "en": "Rock"
+      },
+      {
+        "key": "item.sleepHerb.name",
+        "zhCN": "睡眠草",
+        "en": "Sleep Herb"
+      },
+      {
+        "key": "item.knockStaff.name",
+        "zhCN": "击退之杖",
+        "en": "Knockback Staff"
+      },
+      {
+        "key": "theme.cave.name",
+        "zhCN": "洞窟",
+        "en": "Cave"
+      },
+      {
+        "key": "theme.forest.name",
+        "zhCN": "森林",
+        "en": "Forest"
+      },
+      {
+        "key": "theme.wetcave.name",
+        "zhCN": "湿润洞窟",
+        "en": "Wet Cave"
+      },
+      {
+        "key": "theme.ruins.name",
+        "zhCN": "遗迹",
+        "en": "Ruins"
+      },
+      {
+        "key": "theme.wooden.name",
+        "zhCN": "木屋",
+        "en": "Wooden"
+      },
+      {
+        "key": "theme.modern.name",
+        "zhCN": "现代",
+        "en": "Modern"
+      },
+      {
+        "key": "theme.cyber.name",
+        "zhCN": "赛博",
+        "en": "Cyber"
+      },
+      {
+        "key": "theme.future.name",
+        "zhCN": "未来",
+        "en": "Future"
+      },
+      {
+        "key": "preview.floor",
+        "zhCN": "当前第 {floor} 层",
+        "en": "Floor {floor}"
+      },
+      {
+        "key": "preview.banner",
+        "zhCN": "设计师试玩 · 内存存档 · seed={seed} · 起始层={floor}",
+        "en": "Designer preview · Memory saves · seed={seed} · floor={floor}"
+      }
+    ]
+  }
+}

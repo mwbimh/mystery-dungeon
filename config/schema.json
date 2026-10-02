@@ -1,0 +1,1113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "迷宫配置 v1",
+  "description": "迷宫配置 v1",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "player",
+    "rules",
+    "map",
+    "effects",
+    "enemies",
+    "items",
+    "enemySpawns",
+    "itemDrops",
+    "themes",
+    "localization"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "title": "配置版本",
+      "description": "配置版本；单位：版本；范围 1–1。",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "player": {
+      "type": "object",
+      "title": "玩家初始属性",
+      "description": "玩家初始属性",
+      "additionalProperties": false,
+      "required": [
+        "hp",
+        "atk",
+        "def",
+        "belly"
+      ],
+      "properties": {
+        "hp": {
+          "type": "integer",
+          "title": "初始及最大生命",
+          "description": "初始及最大生命；单位：点；范围 1–10000。",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "atk": {
+          "type": "integer",
+          "title": "攻击",
+          "description": "攻击；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "def": {
+          "type": "integer",
+          "title": "防御",
+          "description": "防御；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "belly": {
+          "type": "integer",
+          "title": "初始及最大饱食度",
+          "description": "初始及最大饱食度；单位：点；范围 1–200。",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "title": "关卡与回合",
+      "description": "关卡与回合",
+      "additionalProperties": false,
+      "required": [
+        "totalFloors",
+        "maxMonsters",
+        "enemyScale",
+        "hungerEvery",
+        "regenEvery",
+        "starvationDamage",
+        "wandererEvery",
+        "roomEnemyChance",
+        "idleMoveChance",
+        "floorItems",
+        "houseItems"
+      ],
+      "properties": {
+        "totalFloors": {
+          "type": "integer",
+          "title": "通关楼层",
+          "description": "通关楼层；单位：层；范围 1–240。",
+          "minimum": 1,
+          "maximum": 240
+        },
+        "maxMonsters": {
+          "type": "integer",
+          "title": "同时存活敌人上限",
+          "description": "同时存活敌人上限；单位：只；范围 1–64。",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "enemyScale": {
+          "type": "number",
+          "title": "敌人生命/攻击倍率",
+          "description": "敌人生命/攻击倍率；单位：倍；范围 0.01–10。",
+          "minimum": 0.01,
+          "maximum": 10
+        },
+        "hungerEvery": {
+          "type": "integer",
+          "title": "饱食度减少1点间隔",
+          "description": "饱食度减少1点间隔；单位：回合；范围 1–1000。",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "regenEvery": {
+          "type": "integer",
+          "title": "回复1点生命间隔",
+          "description": "回复1点生命间隔；单位：回合；范围 1–1000。",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "starvationDamage": {
+          "type": "integer",
+          "title": "空腹每回合伤害",
+          "description": "空腹每回合伤害；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "wandererEvery": {
+          "type": "integer",
+          "title": "游荡敌人生成间隔",
+          "description": "游荡敌人生成间隔；单位：回合；范围 1–10000。",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "roomEnemyChance": {
+          "type": "number",
+          "title": "普通房间初始生成1只敌人概率",
+          "description": "普通房间初始生成1只敌人概率；单位：概率；范围 0–1。",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "idleMoveChance": {
+          "type": "number",
+          "title": "未发现玩家时移动概率",
+          "description": "未发现玩家时移动概率；单位：概率；范围 0–1。",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "floorItems": {
+          "type": "object",
+          "title": "普通层物品数量",
+          "description": "普通层物品数量",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "普通层物品数量下限",
+              "description": "普通层物品数量下限；单位：个；范围 0–100。",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "max": {
+              "type": "integer",
+              "title": "普通层物品数量上限",
+              "description": "普通层物品数量上限；单位：个；范围 0–100。",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "houseItems": {
+          "type": "object",
+          "title": "怪物屋物品数量",
+          "description": "怪物屋物品数量",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "怪物屋物品数量下限",
+              "description": "怪物屋物品数量下限；单位：个；范围 0–100。",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "max": {
+              "type": "integer",
+              "title": "怪物屋物品数量上限",
+              "description": "怪物屋物品数量上限；单位：个；范围 0–100。",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "title": "地图生成",
+      "description": "地图生成",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "skipRoomChance",
+        "hallChance",
+        "loopChance",
+        "monsterHouseChance"
+      ],
+      "properties": {
+        "width": {
+          "type": "object",
+          "title": "地图宽度",
+          "description": "地图宽度",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "地图宽度下限",
+              "description": "地图宽度下限；单位：格；范围 50–80。",
+              "minimum": 50,
+              "maximum": 80
+            },
+            "max": {
+              "type": "integer",
+              "title": "地图宽度上限",
+              "description": "地图宽度上限；单位：格；范围 50–80。",
+              "minimum": 50,
+              "maximum": 80
+            }
+          }
+        },
+        "height": {
+          "type": "object",
+          "title": "地图高度",
+          "description": "地图高度",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "地图高度下限",
+              "description": "地图高度下限；单位：格；范围 30–48。",
+              "minimum": 30,
+              "maximum": 48
+            },
+            "max": {
+              "type": "integer",
+              "title": "地图高度上限",
+              "description": "地图高度上限；单位：格；范围 30–48。",
+              "minimum": 30,
+              "maximum": 48
+            }
+          }
+        },
+        "skipRoomChance": {
+          "type": "number",
+          "title": "跳过房间槽位概率",
+          "description": "跳过房间槽位概率；单位：概率；范围 0–1。",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hallChance": {
+          "type": "number",
+          "title": "合并大厅概率",
+          "description": "合并大厅概率；单位：概率；范围 0–1。",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "loopChance": {
+          "type": "number",
+          "title": "额外通道概率",
+          "description": "额外通道概率；单位：概率；范围 0–1。",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "monsterHouseChance": {
+          "type": "object",
+          "title": "怪物屋概率",
+          "description": "怪物屋概率",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "number",
+              "title": "怪物屋概率下限",
+              "description": "怪物屋概率下限；单位：概率；范围 0–1。",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "max": {
+              "type": "number",
+              "title": "怪物屋概率上限",
+              "description": "怪物屋概率上限；单位：概率；范围 0–1。",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "effects": {
+      "type": "object",
+      "title": "物品与战斗效果",
+      "description": "物品与战斗效果",
+      "additionalProperties": false,
+      "required": [
+        "smallFood",
+        "bigFood",
+        "bellyCap",
+        "bellyGrowth",
+        "rockDamage",
+        "foodDamage",
+        "wallDamage",
+        "throwRange",
+        "staffThrowRange",
+        "staffRange",
+        "sleepTurns",
+        "staffCharges",
+        "damageRoll"
+      ],
+      "properties": {
+        "smallFood": {
+          "type": "integer",
+          "title": "饭团恢复饱食度",
+          "description": "饭团恢复饱食度；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "bigFood": {
+          "type": "integer",
+          "title": "大饭团恢复饱食度",
+          "description": "大饭团恢复饱食度；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "bellyCap": {
+          "type": "integer",
+          "title": "饱食度成长上限",
+          "description": "饱食度成长上限；单位：点；范围 1–1000。",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "bellyGrowth": {
+          "type": "integer",
+          "title": "饱腹进食的上限成长",
+          "description": "饱腹进食的上限成长；单位：点；范围 0–100。",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rockDamage": {
+          "type": "integer",
+          "title": "石头伤害",
+          "description": "石头伤害；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "foodDamage": {
+          "type": "integer",
+          "title": "投掷食物伤害",
+          "description": "投掷食物伤害；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "wallDamage": {
+          "type": "integer",
+          "title": "击退撞墙伤害",
+          "description": "击退撞墙伤害；单位：点；范围 0–1000。",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "throwRange": {
+          "type": "integer",
+          "title": "普通投掷距离",
+          "description": "普通投掷距离；单位：格；范围 1–100。",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "staffThrowRange": {
+          "type": "integer",
+          "title": "杖投掷距离",
+          "description": "杖投掷距离；单位：格；范围 1–100。",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "staffRange": {
+          "type": "integer",
+          "title": "杖光射程",
+          "description": "杖光射程；单位：格；范围 1–100。",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "sleepTurns": {
+          "type": "object",
+          "title": "睡眠持续时间（施加后当回合会递减）",
+          "description": "睡眠持续时间（施加后当回合会递减）",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "睡眠持续时间（施加后当回合会递减）下限",
+              "description": "睡眠持续时间（施加后当回合会递减）下限；单位：回合；范围 1–100。",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "max": {
+              "type": "integer",
+              "title": "睡眠持续时间（施加后当回合会递减）上限",
+              "description": "睡眠持续时间（施加后当回合会递减）上限；单位：回合；范围 1–100。",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "staffCharges": {
+          "type": "object",
+          "title": "新杖使用次数",
+          "description": "新杖使用次数",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "新杖使用次数下限",
+              "description": "新杖使用次数下限；单位：次；范围 1–100。",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "max": {
+              "type": "integer",
+              "title": "新杖使用次数上限",
+              "description": "新杖使用次数上限；单位：次；范围 1–100。",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "damageRoll": {
+          "type": "object",
+          "title": "近战伤害随机加值（最终至少1点）",
+          "description": "近战伤害随机加值（最终至少1点）",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "title": "近战伤害随机加值（最终至少1点）下限",
+              "description": "近战伤害随机加值（最终至少1点）下限；单位：点；范围 -100–100。",
+              "minimum": -100,
+              "maximum": 100
+            },
+            "max": {
+              "type": "integer",
+              "title": "近战伤害随机加值（最终至少1点）上限",
+              "description": "近战伤害随机加值（最终至少1点）上限；单位：点；范围 -100–100。",
+              "minimum": -100,
+              "maximum": 100
+            }
+          }
+        }
+      }
+    },
+    "enemies": {
+      "type": "object",
+      "title": "敌人（稳定ID不可删除或改名）",
+      "description": "敌人（稳定ID不可删除或改名）",
+      "additionalProperties": false,
+      "required": [
+        "slime",
+        "bat",
+        "shell"
+      ],
+      "properties": {
+        "slime": {
+          "type": "object",
+          "title": "史莱姆",
+          "description": "史莱姆",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "hp",
+            "atk",
+            "def",
+            "glyph",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "名称",
+              "description": "名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "hp": {
+              "type": "integer",
+              "title": "基础生命（乘全局倍率后四舍五入）",
+              "description": "基础生命（乘全局倍率后四舍五入）；单位：点；范围 1–10000。",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "atk": {
+              "type": "integer",
+              "title": "基础攻击（乘全局倍率后四舍五入）",
+              "description": "基础攻击（乘全局倍率后四舍五入）；单位：点；范围 0–1000。",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "def": {
+              "type": "integer",
+              "title": "防御",
+              "description": "防御；单位：点；范围 0–1000。",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "glyph": {
+              "type": "string",
+              "title": "2D标记",
+              "description": "2D标记",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        },
+        "bat": {
+          "type": "object",
+          "title": "蝙蝠",
+          "description": "蝙蝠",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "hp",
+            "atk",
+            "def",
+            "glyph",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "名称",
+              "description": "名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "hp": {
+              "type": "integer",
+              "title": "基础生命（乘全局倍率后四舍五入）",
+              "description": "基础生命（乘全局倍率后四舍五入）；单位：点；范围 1–10000。",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "atk": {
+              "type": "integer",
+              "title": "基础攻击（乘全局倍率后四舍五入）",
+              "description": "基础攻击（乘全局倍率后四舍五入）；单位：点；范围 0–1000。",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "def": {
+              "type": "integer",
+              "title": "防御",
+              "description": "防御；单位：点；范围 0–1000。",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "glyph": {
+              "type": "string",
+              "title": "2D标记",
+              "description": "2D标记",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        },
+        "shell": {
+          "type": "object",
+          "title": "甲壳",
+          "description": "甲壳",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "hp",
+            "atk",
+            "def",
+            "glyph",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "名称",
+              "description": "名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "hp": {
+              "type": "integer",
+              "title": "基础生命（乘全局倍率后四舍五入）",
+              "description": "基础生命（乘全局倍率后四舍五入）；单位：点；范围 1–10000。",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "atk": {
+              "type": "integer",
+              "title": "基础攻击（乘全局倍率后四舍五入）",
+              "description": "基础攻击（乘全局倍率后四舍五入）；单位：点；范围 0–1000。",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "def": {
+              "type": "integer",
+              "title": "防御",
+              "description": "防御；单位：点；范围 0–1000。",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "glyph": {
+              "type": "string",
+              "title": "2D标记",
+              "description": "2D标记",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "object",
+      "title": "物品（稳定ID不可删除或改名）",
+      "description": "物品（稳定ID不可删除或改名）",
+      "additionalProperties": false,
+      "required": [
+        "onigiri",
+        "bigOnigiri",
+        "rock",
+        "sleepHerb",
+        "knockStaff"
+      ],
+      "properties": {
+        "onigiri": {
+          "type": "object",
+          "title": "饭团",
+          "description": "饭团",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "显示名称",
+              "description": "显示名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        },
+        "bigOnigiri": {
+          "type": "object",
+          "title": "大饭团",
+          "description": "大饭团",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "显示名称",
+              "description": "显示名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        },
+        "rock": {
+          "type": "object",
+          "title": "石头",
+          "description": "石头",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "显示名称",
+              "description": "显示名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        },
+        "sleepHerb": {
+          "type": "object",
+          "title": "睡眠草",
+          "description": "睡眠草",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "显示名称",
+              "description": "显示名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        },
+        "knockStaff": {
+          "type": "object",
+          "title": "击退之杖",
+          "description": "击退之杖",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "color",
+            "nameKey"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "显示名称",
+              "description": "显示名称",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "color": {
+              "type": "string",
+              "title": "2D颜色 #RRGGBB",
+              "description": "2D颜色 #RRGGBB",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "nameKey": {
+              "type": "string",
+              "title": "本地化文本key",
+              "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+            }
+          }
+        }
+      }
+    },
+    "enemySpawns": {
+      "type": "array",
+      "title": "按起始楼层升序的敌人生成表",
+      "description": "按起始楼层升序的敌人生成表",
+      "minItems": 1,
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "title": "楼层区间",
+        "description": "楼层区间",
+        "additionalProperties": false,
+        "required": [
+          "fromFloor",
+          "entries"
+        ],
+        "properties": {
+          "fromFloor": {
+            "type": "integer",
+            "title": "起始楼层（含）",
+            "description": "起始楼层（含）；单位：层；范围 1–240。",
+            "minimum": 1,
+            "maximum": 240
+          },
+          "entries": {
+            "type": "array",
+            "title": "敌人权重",
+            "description": "敌人权重",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "title": "掉落/生成条目",
+              "description": "掉落/生成条目",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "weight"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "title": "稳定引用ID",
+                  "description": "稳定引用ID",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "enum": [
+                    "slime",
+                    "bat",
+                    "shell"
+                  ]
+                },
+                "weight": {
+                  "type": "number",
+                  "title": "相对权重",
+                  "description": "相对权重；单位：权重；范围 0–100000。",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "itemDrops": {
+      "type": "array",
+      "title": "地面物品权重",
+      "description": "地面物品权重",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "title": "掉落/生成条目",
+        "description": "掉落/生成条目",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "weight"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "稳定引用ID",
+            "description": "稳定引用ID",
+            "minLength": 1,
+            "maxLength": 80,
+            "enum": [
+              "onigiri",
+              "bigOnigiri",
+              "rock",
+              "sleepHerb",
+              "knockStaff"
+            ]
+          },
+          "weight": {
+            "type": "number",
+            "title": "相对权重",
+            "description": "相对权重；单位：权重；范围 0–100000。",
+            "minimum": 0,
+            "maximum": 100000
+          }
+        }
+      }
+    },
+    "themes": {
+      "type": "object",
+      "title": "主题编排",
+      "description": "主题编排",
+      "additionalProperties": false,
+      "required": [
+        "floorsPerTheme",
+        "order"
+      ],
+      "properties": {
+        "floorsPerTheme": {
+          "type": "integer",
+          "title": "每主题楼层数",
+          "description": "每主题楼层数；单位：层；范围 1–240。",
+          "minimum": 1,
+          "maximum": 240
+        },
+        "order": {
+          "type": "array",
+          "title": "主题ID顺序（超过长度时沿用最后主题）",
+          "description": "主题ID顺序（超过长度时沿用最后主题）",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "title": "主题ID",
+            "description": "主题ID",
+            "minLength": 1,
+            "maxLength": 80,
+            "enum": [
+              "cave",
+              "forest",
+              "wetcave",
+              "ruins",
+              "wooden",
+              "modern",
+              "cyber",
+              "future"
+            ]
+          }
+        }
+      }
+    },
+    "localization": {
+      "type": "object",
+      "title": "本地化",
+      "description": "由 texts.xlsx 生成；不调用外部翻译服务。",
+      "additionalProperties": false,
+      "required": [
+        "defaultLocale",
+        "texts"
+      ],
+      "properties": {
+        "defaultLocale": {
+          "type": "string",
+          "title": "默认语言",
+          "minLength": 1,
+          "maxLength": 20,
+          "enum": [
+            "zh-CN"
+          ]
+        },
+        "texts": {
+          "type": "array",
+          "title": "文本表",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": {
+            "type": "object",
+            "title": "文本",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "zhCN",
+              "en"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "title": "本地化文本key",
+                "description": "引用 Texts.key；稳定文本键，不填写显示文案。",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_.]*$"
+              },
+              "zhCN": {
+                "type": "string",
+                "title": "译文",
+                "description": "必填译文；允许命名占位符 {name}，所有语言占位符必须一致。",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "en": {
+                "type": "string",
+                "title": "译文",
+                "description": "必填译文；允许命名占位符 {name}，所有语言占位符必须一致。",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

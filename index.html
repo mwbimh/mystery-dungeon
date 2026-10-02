@@ -174,10 +174,11 @@
     </div>
   </div>
 
+  <script src="js/config.js"></script>
   <script>
   (function () {
     var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
-    var v = "65";
+    var v = "66";
     var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
     if (!flat) {
       files.unshift("vendor/three.min.js");
@@ -197,7 +198,22 @@
       };
       document.body.appendChild(s);
     }
-    load(0);
+    MDConfig.boot().then(function () {
+      if (MD.preview) {
+        var banner = document.createElement("div");
+        banner.textContent = MD.t("preview.banner", MD.preview);
+        banner.style.cssText = "position:fixed;top:0;left:0;z-index:9999;background:#153a30;color:white;padding:4px 12px;font:14px sans-serif;pointer-events:none";
+        document.body.appendChild(banner);
+      }
+      load(0);
+    }).catch(function (error) {
+      var panel = document.createElement("pre");
+      panel.id = "configError";
+      panel.style.cssText = "position:fixed;inset:20px;z-index:99999;background:#251d24;color:white;padding:24px;white-space:pre-wrap";
+      panel.textContent = "配置加载失败，游戏未启动。请先运行 python3 tools/convert_config.py，并使用 HTTP 服务打开游戏。\n" + error.message;
+      document.body.appendChild(panel);
+      console.error(error);
+    });
   })();
   </script>
 </body>
