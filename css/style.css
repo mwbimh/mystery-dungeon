@@ -1061,113 +1061,258 @@ button.hud-seal {
 }
 
 
-/* ---- town map hub ---- */
+/* ---- paper town hub ----
+   Artwork and hit targets share this canvas, with a separately composed mobile map.
+   White cut edges are reserved for interactive stickers; scenery is printed paper. */
 .overlay.town-overlay {
-  padding: 0;
-  background: #1a1420;
+  /* The fixed save/menu controls keep a dedicated strip, even while the town scrolls. */
+  top: 54px;
+  display: block;
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #dce5d9;
+  background-image: radial-gradient(ellipse at 15% 0, #eff0da, transparent 55%);
   backdrop-filter: none;
-  place-items: stretch;
+  scrollbar-color: #bcc9b6 #e8ecdc;
 }
+.overlay.town-overlay::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: 54px;
+  background: #dce5d9;
+  border-bottom: 1px solid #c9d3c1;
+  pointer-events: none;
+}
+.overlay.town-overlay.hidden { display: none; }
 .town-map {
+  --town-ink: #405551;
+  --town-muted: #788579;
   position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: #2a2030;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(1240px, 100%);
+  min-height: calc(100dvh - 78px);
+  margin: 0 auto;
+  padding: 18px 22px 17px;
+  border: 1px solid #fdfaf0;
+  border-radius: 10px;
+  color: var(--town-ink);
+  background: #faf4e5;
+  background-image: repeating-linear-gradient(0deg, transparent 0 3px, #b7a68105 3px 4px);
+  box-shadow: 0 8px 30px #4c62461a;
 }
-.town-map-bg {
+.town-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 0 8px;
+}
+.town-heading-copy { min-width: 0; }
+.town-eyebrow { display: block; color: #839183; font-size: 9px; letter-spacing: .26em; font-weight: 800; }
+.town-heading h1 { margin: 2px 0 3px; font-family: "Kaiti SC", "STKaiti", "Noto Serif SC", serif; font-size: clamp(23px, 2.25vw, 32px); font-weight: 800; letter-spacing: .13em; color: #405b55; }
+.town-heading p { margin: 0; font-size: 11px; line-height: 1.45; color: #758071; }
+.town-heading p span { margin-left: 12px; color: #9a7d59; }
+.town-tools { display: flex; flex-shrink: 0; gap: 9px; }
+.town-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 72px;
+  padding: 6px 12px;
+  border: 4px solid #fffef9;
+  border-radius: 14px 12px 15px 11px;
+  background: #e6eacf;
+  color: #536753;
+  box-shadow: 0 2px 0 #c6c3a4, 0 4px 8px #4557400c;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform .16s ease, background .16s ease;
+}
+.town-tool span { font-size: 18px; }
+.town-tool:hover { transform: rotate(-3deg); background: #d9e3c4; }
+.town-tool:focus-visible { outline: 3px solid #477779; outline-offset: 3px; }
+.town-scene {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, max(760px, calc((100dvh - 272px) * 1.81818)));
+  flex: 0 0 auto;
+  aspect-ratio: 1200 / 660;
+  border-radius: 18px 25px 19px 22px;
+  background: #eee4c7;
+  box-shadow: inset 0 0 0 1px #b5b7954d, 0 3px 0 #ddd1b5, 0 7px 20px #8f82581a;
+}
+.town-scenery, .town-map-bg {
   position: absolute;
   inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
+  border-radius: inherit;
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
 }
+.town-map-bg { object-fit: contain; }
+.town-map-note { position: absolute; left: 5%; top: 5%; color: #70856d; transform: rotate(-4deg); pointer-events: none; }
+.town-map-note span { display: block; font: 700 clamp(11px, 1.2vw, 16px)/1.4 "Kaiti SC", "STKaiti", serif; letter-spacing: .13em; }
+.town-map-note small { display: block; margin-top: 3px; font: italic clamp(8px, .75vw, 10px)/1.4 Georgia, serif; color: #93a187; }
 .town-sticker {
   position: absolute;
+  left: var(--sticker-x);
+  bottom: var(--sticker-bottom);
+  width: var(--sticker-size, 14%);
+  aspect-ratio: 1;
   transform: translateX(-50%);
+  transform-origin: 50% 96.67%;
   z-index: 2;
-  border: none;
+  border: 0;
+  outline: none;
+  border-radius: 42%;
+  box-shadow: none; /* Do not inherit the global green button underline. */
   background: transparent;
   padding: 0;
+  color: var(--town-ink);
   cursor: pointer;
-  filter: drop-shadow(0 4px 6px rgba(40, 24, 8, 0.35));
-  transition: transform 0.15s ease, filter 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.town-sticker-media {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform-origin: 50% 96.67%;
+  /* The same feet anchor is retained across both PNG poses and all motion. */
+  filter: drop-shadow(1px 0 0 #fffefa) drop-shadow(-1px 0 0 #fffefa) drop-shadow(0 1px 0 #fffefa) drop-shadow(0 -1px 0 #fffefa) drop-shadow(0 3px 1px #6c665333);
+  transition: transform .2s ease, filter .2s ease;
+  animation: town-paper-breathe 4.8s ease-in-out infinite;
+  animation-delay: var(--sticker-delay, 0s);
 }
 .town-sticker img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: contain;
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+  transition: opacity .15s ease;
 }
-.town-sticker img.hov { display: none; }
-.town-sticker:hover img.idle,
-.town-sticker:focus-visible img.idle { display: none; }
-.town-sticker:hover img.hov,
-.town-sticker:focus-visible img.hov { display: block; }
-.town-sticker:hover,
-.town-sticker:focus-visible {
-  transform: translateX(-50%) scale(1.08);
-  filter: drop-shadow(0 6px 10px rgba(40, 24, 8, 0.45));
-  z-index: 3;
-}
-.town-sticker-self {
-  z-index: 4;
-}
-.town-sticker-self:hover,
-.town-sticker-self:focus-visible {
-  transform: translateX(-50%) scale(1.06);
-}
+.town-sticker img.hov { opacity: 0; }
+.town-sticker:is(:hover, :focus-visible) { z-index: 4; }
+.town-sticker:is(:hover, :focus-visible) .town-sticker-media { animation: none; transform: scale(1.035); filter: drop-shadow(1px 0 0 #fffefa) drop-shadow(-1px 0 0 #fffefa) drop-shadow(0 1px 0 #fffefa) drop-shadow(0 -1px 0 #fffefa) drop-shadow(0 5px 2px #596a4e44); }
+.town-sticker:not(.town-sticker-entrance):is(:hover, :focus-visible) img.idle { opacity: 0; }
+.town-sticker:is(:hover, :focus-visible) img.hov { opacity: 1; }
+.town-sticker:active .town-sticker-media { transform: scale(.98); }
+.town-sticker:focus-visible .town-label { outline: 3px solid #477779; outline-offset: 3px; }
+.town-sticker-entrance .town-sticker-media { animation: none; transform-origin: 50% 89.3%; }
+.town-sticker-entrance:is(:hover, :focus-visible) .town-sticker-media { filter: drop-shadow(1px 0 0 #fffefa) drop-shadow(-1px 0 0 #fffefa) drop-shadow(0 1px 0 #fffefa) drop-shadow(0 -1px 0 #fffefa) drop-shadow(0 0 8px #e7b954aa); }
 .town-label {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: #fff8e8;
-  text-shadow: 0 1px 0 #4a2c10, 0 0 6px rgba(0,0,0,0.55);
-  letter-spacing: 0.04em;
-  text-align: center;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.town-msg-chip {
   position: absolute;
+  top: calc(100% - 1px);
   left: 50%;
-  top: 2%;
   transform: translateX(-50%);
-  z-index: 5;
-  max-width: min(520px, 86vw);
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(255, 248, 236, 0.9);
-  border: 2px solid #c48848;
-  color: #5a3818;
-  font-size: 0.82rem;
-  font-weight: 650;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(40, 24, 8, 0.2);
-  pointer-events: none;
-}
-.town-help {
-  position: absolute;
-  right: 14px;
-  top: 12px;
-  z-index: 6;
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 2px solid #c48848;
-  background: rgba(255, 248, 236, 0.92);
-  color: #8a3020;
+  display: block;
+  min-width: 66px;
+  padding: 2px 11px 3px;
+  border: 3px solid #fffef9;
+  border-radius: 10px 8px 11px 8px;
+  background: #f9f3df;
+  box-shadow: 0 2px 0 #b3b29855;
+  color: #405952;
+  font-size: clamp(11px, 1vw, 13px);
   font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(40, 24, 8, 0.2);
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: auto;
 }
+.town-label small { display: block; margin-top: 3px; color: #79816b; font-size: 9px; font-weight: 600; letter-spacing: .04em; }
+.town-sticker-self .town-label { background: #e1ebee; color: #375e77; }
+.town-sticker-entrance .town-label { top: 91%; background: #efe0b8; color: #735733; }
+#stickerEntrance { --sticker-x: 50%; --sticker-bottom: 69%; --sticker-size: 14%; }
+#stickerChatgpt { --sticker-x: 25%; --sticker-bottom: 45%; --sticker-size: 14.5%; --sticker-delay: -.7s; }
+#stickerClaude { --sticker-x: 75%; --sticker-bottom: 45%; --sticker-size: 14.5%; --sticker-delay: -2.2s; }
+#stickerHarness { --sticker-x: 60%; --sticker-bottom: 31%; --sticker-size: 14%; --sticker-delay: -1.3s; }
+#stickerKimi { --sticker-x: 18%; --sticker-bottom: 9%; --sticker-size: 14.5%; --sticker-delay: -3.1s; }
+#stickerGlm { --sticker-x: 83%; --sticker-bottom: 9%; --sticker-size: 14.5%; --sticker-delay: -4s; }
+#stickerDeepseek { --sticker-x: 45%; --sticker-bottom: 7.5%; --sticker-size: 15.5%; --sticker-delay: -1.8s; }
+@keyframes town-paper-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.012); } }
+.town-footer { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 26px; align-items: center; width: 100%; padding: 4px 8px 0; }
+.town-welcome { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.town-welcome-mark { flex-shrink: 0; width: 38px; height: 38px; border: 1px solid #bdc5ac; border-radius: 50%; color: #92a07a; text-align: center; line-height: 36px; font-size: 25px; }
+.town-welcome-title { display: block; font-size: 12px; font-weight: 750; letter-spacing: .08em; color: #68745f; }
+.town-msg-chip { margin: 5px 0 0; color: #83806a; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.dungeon-choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 5px 10px; min-width: 0; padding-left: 26px; border-left: 1px dashed #c6c7ac; }
+.dungeon-choice-field { min-width: 0; }
+.dungeon-choice label { display: block; margin-bottom: 4px; color: #7b856e; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.dungeon-choice select { width: 100%; min-height: 42px; padding: 6px 24px 6px 9px; border: 3px solid #fffef9; border-radius: 9px; background: #eee6cb; color: #546150; box-shadow: 0 2px 0 #d0cbb5; font: inherit; font-size: 12px; cursor: pointer; }
+.dungeon-choice button { display: flex; align-items: center; justify-content: center; gap: 11px; min-height: 44px; padding: 7px 14px; border: 4px solid #fffef9; border-radius: 11px 14px 12px 10px; background: #547b70; color: #fffaf0; box-shadow: 0 2px 0 #a6b2a0; font-size: 12px; font-weight: 750; cursor: pointer; transition: background .15s, transform .15s; }
+.dungeon-choice button:hover { background: #426a60; transform: rotate(-1deg); }
+.dungeon-choice button span { font-size: 20px; line-height: 1; }
+.dungeon-choice :is(select, button):focus-visible { outline: 3px solid #477779; outline-offset: 3px; }
+.dungeon-choice p { grid-column: 1 / -1; margin: 0; color: #8c8872; font-size: 9px; line-height: 1.45; }
+.hud-dungeon { max-width: 215px; font-size: .7rem; color: #ffe1ab; overflow-wrap: anywhere; }
+@media (max-width: 900px) and (min-width: 681px) {
+  .town-map { padding: 14px; gap: 10px; }
+  .town-footer { gap: 16px; padding-top: 8px; }
+  .town-welcome { gap: 8px; }
+  .town-welcome-mark { display: none; }
+  .dungeon-choice { padding-left: 16px; }
+  .dungeon-choice button { padding-inline: 8px; }
+  .town-label { padding-inline: 7px; }
+}
+@media (max-width: 680px) {
+  .overlay.town-overlay { padding: 0; }
+  .town-map { min-height: calc(100dvh - 54px); padding: max(12px, env(safe-area-inset-top)) 10px max(16px, env(safe-area-inset-bottom)); gap: 12px; border: 0; border-radius: 0; }
+  .town-heading { padding: 0 3px; gap: 8px; }
+  .town-eyebrow { font-size: 7px; letter-spacing: .19em; }
+  .town-heading h1 { margin: 3px 0 2px; font-size: 25px; }
+  .town-heading p { font-size: 10px; }
+  .town-heading p span { display: block; margin: 2px 0 0; font-size: 9px; }
+  .town-tools { gap: 6px; }
+  .town-tool { flex-direction: column; gap: 2px; min-width: 49px; min-height: 49px; padding: 4px 6px; border-width: 3px; font-size: 10px; }
+  .town-tool span { font-size: 16px; }
+  .town-scene { width: 100%; aspect-ratio: 800 / 1100; }
+  .town-map-note { left: 5%; top: 5%; }
+  .town-map-note span { font-size: 11px; }
+  .town-map-note small { font-size: 8px; }
+  .town-label { padding: 2px 8px 3px; min-width: 56px; border-width: 2px; font-size: 11px; }
+  .town-label small { margin-top: 2px; font-size: 8px; }
+  #stickerEntrance { --sticker-x: 50%; --sticker-bottom: 78%; --sticker-size: 27%; }
+  #stickerChatgpt { --sticker-x: 24%; --sticker-bottom: 55%; --sticker-size: 29%; }
+  #stickerClaude { --sticker-x: 76%; --sticker-bottom: 55%; --sticker-size: 29%; }
+  #stickerHarness { --sticker-x: 50%; --sticker-bottom: 34%; --sticker-size: 28%; }
+  #stickerKimi { --sticker-x: 20%; --sticker-bottom: 12%; --sticker-size: 29%; }
+  #stickerGlm { --sticker-x: 82%; --sticker-bottom: 12%; --sticker-size: 29%; }
+  #stickerDeepseek { --sticker-x: 50%; --sticker-bottom: 6%; --sticker-size: 31%; }
+  .town-footer { grid-template-columns: 1fr; gap: 11px; padding: 4px 4px 0; }
+  .town-welcome { gap: 8px; }
+  .town-welcome-mark { width: 28px; height: 28px; line-height: 26px; font-size: 18px; }
+  .town-welcome-title { font-size: 11px; }
+  .town-msg-chip { margin-top: 3px; font-size: 10px; }
+  .dungeon-choice { padding: 10px 0 0; border-left: 0; border-top: 1px dashed #c6c7ac; gap: 5px 8px; }
+  .dungeon-choice select { font-size: 12px; }
+  .dungeon-choice button { padding-inline: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .town-sticker-media { animation: none; }
+  .town-sticker *, .town-tool, .dungeon-choice button { transition: none; }
+}
+.reduced-motion .town-sticker-media { animation: none; }
 
 /* debug theme preview panel (?debug=1) */
 #debugPanel {
@@ -1196,40 +1341,3 @@ button.hud-seal {
 }
 #debugPanel .dbg-btn:hover { background: rgba(140, 90, 40, 0.95); }
 #debugPanel .dbg-small { font-size: 11px; padding: 2px 6px; }
-
-
-/* Dungeon choice is a town-only new-run control, never an in-place map switch. */
-.dungeon-choice {
-  position: absolute;
-  z-index: 6;
-  top: 12px;
-  left: 14px;
-  width: min(280px, calc(100vw - 72px));
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
-  padding: 12px;
-  border: 2px solid #c48848;
-  border-radius: 12px;
-  background: rgba(255, 248, 236, 0.96);
-  color: #5a3818;
-  box-shadow: 0 4px 14px rgba(40, 24, 8, 0.22);
-}
-.dungeon-choice label { font-size: 0.85rem; font-weight: 750; }
-.dungeon-choice select {
-  width: 100%;
-  min-height: 36px;
-  color: #3e2917;
-  background: #fffaf2;
-  border: 1px solid #ba8b53;
-  border-radius: 6px;
-  padding: 5px 8px;
-  font: inherit;
-}
-.dungeon-choice button { min-height: 36px; }
-.dungeon-choice p { margin: 0; font-size: 0.73rem; line-height: 1.45; }
-.hud-dungeon { max-width: 215px; font-size: 0.7rem; color: #ffe1ab; overflow-wrap: anywhere; }
-@media (max-width: 720px) {
-  .dungeon-choice { top: auto; bottom: 12px; left: 10px; width: min(250px, 62vw); padding: 9px; }
-  .town-msg-chip { max-width: 72vw; font-size: 0.72rem; }
-}

@@ -1,0 +1,26 @@
+/* Modal layers preserve the paper town behind its inventory. */
+body.town-panel-open #hudInv {
+  position: fixed;
+  z-index: 80;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: calc(100vw - 28px);
+  max-height: min(76vh, 640px);
+  border: 5px solid #fffdf6;
+  box-shadow: 0 16px 60px #31413838, 0 0 0 1px #bdb69e;
+  background: #faf3df;
+}
+body.town-panel-open #townOverlay::after {
+  content: ""; position: fixed; inset: 0;
+  background: #434b3c24; pointer-events: none;
+}
+body.game-modal-open .session-controls { visibility: hidden; }
+#helpOverlay, #endOverlay { z-index: 100; }
+#aimHint.hidden { display: none; }
+.slot:focus-visible { outline: 3px solid #618473; outline-offset: 2px; }
+@media (max-width: 580px) {
+  body.town-panel-open #hudInv { width: calc(100vw - 28px); flex-direction: column; max-height: 77vh; overflow: auto; }
+  body.town-panel-open #hudInv .hud-inv-body,
+  body.town-panel-open #hudInv .hud-wh { width: auto; flex: none; }
+  body.town-panel-open #hudInv .hud-wh { border-left: 0; border-top: 1px solid #d7ccb4; }
+}

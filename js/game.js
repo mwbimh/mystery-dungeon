@@ -33,6 +33,7 @@
 
   const canvas = document.getElementById("game");
   const overlay = document.getElementById("overlay");
+  const inventoryHost = document.getElementById("hudInv").parentElement;
   let ctx = null;
   let overlayCtx = null;
   let use3d = false;
@@ -387,6 +388,7 @@
   }
 
   function resetRunInput() {
+    if (MD.dialogue) MD.dialogue.close("navigation");
     if (state._animTimer) { clearTimeout(state._animTimer); state._animTimer = null; }
     if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
     chordParts = { x: 0, y: 0 };
@@ -405,7 +407,7 @@
   }
 
   function enterDungeon() {
-    if (paused || state.mode !== "town") return;
+    if (paused || state.mode !== "town" || state.invOpen || overlayVisible("helpOverlay") || (MD.dialogue && MD.dialogue.isOpen())) return;
     resetRunInput();
     state.floorConfig = null;
     state.turn = 0;
@@ -459,14 +461,74 @@
     updateUI();
   }
 
+  let helpReturnFocus = null, inventoryReturnFocus = null;
+  function overlayVisible(id) {
+    const el = document.getElementById(id);
+    return !!el && !el.classList.contains("hidden");
+  }
+  function clearPendingInput() {
+    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+    chordParts = { x: 0, y: 0 };
+    state.keysDown.clear(); state.keyBuffer = [];
+    state.dashActive = false; state.pendingDash = null;
+    cancelSkillAim();
+    state.aiming = null;
+    const hint = document.getElementById("aimHint");
+    if (hint) hint.classList.add("hidden");
+  }
+  function syncModalState() {
+    const help = overlayVisible("helpOverlay"), end = overlayVisible("endOverlay");
+    const dialogue = !!(MD.dialogue && MD.dialogue.isOpen());
+    const townPanel = state.mode === "town" && state.invOpen;
+    // The fixed game board is its own stacking context. Town inventory must be
+    // a body-level modal, otherwise the town covers it (or hiding town reveals black).
+    const inventory = document.getElementById("hudInv");
+    if (townPanel && document.body && inventory.parentElement !== document.body) document.body.appendChild(inventory);
+    else if (!townPanel && inventoryHost && inventoryHost.appendChild && inventory.parentElement !== inventoryHost) inventoryHost.appendChild(inventory);
+    if (document.body) {
+      document.body.classList.toggle("town-panel-open", townPanel);
+      document.body.classList.toggle("game-modal-open", help || end || dialogue);
+    }
+    const town = document.getElementById("townOverlay");
+    if (town) town.inert = help || end || dialogue || townPanel;
+    for (const id of ["game", "hudStats", "hudLog", "hudSkills", "hudInv"]) {
+      const node = document.getElementById(id);
+      if (node) node.inert = help || end || dialogue || (state.mode === "town" && (id !== "hudInv" || !townPanel));
+    }
+  }
   function showOverlay(id) {
     const el = document.getElementById(id);
     if (el) el.classList.remove("hidden");
+    if (id === "helpOverlay" || id === "endOverlay") {
+      clearPendingInput();
+      if (id === "helpOverlay") helpReturnFocus = document.activeElement;
+      syncModalState();
+      const button = document.getElementById(id === "helpOverlay" ? "btnHelpClose" : "btnEndOk");
+      if (button) button.focus();
+    } else if (id === "townOverlay") syncModalState();
   }
   function hideOverlay(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
+    syncModalState();
+    if (id === "helpOverlay" && helpReturnFocus) {
+      if (helpReturnFocus.focus) helpReturnFocus.focus();
+      helpReturnFocus = null;
+    }
   }
+  function trapModalFocus(event, root) {
+    if (!root || event.key !== "Tab") return;
+    const nodes = Array.from(root.querySelectorAll('button:not(:disabled),[href],select,input,[tabindex="0"]'))
+      .filter(node => !node.hidden && (!node.getClientRects || node.getClientRects().length));
+    if (!nodes.length) return;
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) {
+      event.preventDefault(); first.focus();
+    }
+  }
+  MD.isGameplayInputBlocked = () => paused || state.mode !== "dungeon" || state.invOpen || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || !!(MD.dialogue && MD.dialogue.isOpen());
 
   function hudInvEl() { return document.getElementById("hudInv"); }
   function hudWhEl() { return document.getElementById("hudWh"); }
@@ -940,6 +1002,7 @@
     state.invOpen = true;
     document.getElementById("aimHint").classList.remove("hidden");
     renderInv();
+    canvas.focus();
   }
 
   function cancelAim() {
@@ -1065,6 +1128,9 @@
 
   // --- Inventory UI ---
   function openInv() {
+    if (paused || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || (MD.dialogue && MD.dialogue.isOpen())) return;
+    clearPendingInput();
+    if (!state.invOpen) inventoryReturnFocus = document.activeElement;
     state.invOpen = true;
     if (state.invSelected == null || state.invSelected < 0 || !state.bag[state.invSelected]) {
       state.invSelected = firstFilledSlot();
@@ -1074,8 +1140,10 @@
     if (hint) hint.classList.add("hidden");
     const inv = hudInvEl();
     if (inv) inv.classList.remove("collapsed");
-    if (state.mode === "town") hideOverlay("townOverlay");
+    syncModalState();
     renderInv();
+    const close = document.getElementById("btnInvClose");
+    if (close) close.focus();
   }
 
   function closeInv() {
@@ -1084,8 +1152,11 @@
     closeWarehouse(true);
     const inv = hudInvEl();
     if (inv) inv.classList.add("collapsed");
-    canvas.focus();
+    syncModalState();
     if (state.mode === "town") showOverlay("townOverlay");
+    const target = inventoryReturnFocus && inventoryReturnFocus.isConnected !== false ? inventoryReturnFocus : canvas;
+    if (target && target.focus) target.focus();
+    inventoryReturnFocus = null;
   }
 
   function fillSlotVisual(slot, item, indexLabel) {
@@ -1119,7 +1190,7 @@
   }
 
   function skillsBlocked() {
-    if (state.mode !== "dungeon") return true;
+    if (paused || state.mode !== "dungeon" || (MD.dialogue && MD.dialogue.isOpen())) return true;
     if (state.animLock) return true;
     const ids = ["endOverlay", "helpOverlay", "townOverlay"];
     for (let i = 0; i < ids.length; i++) {
@@ -1192,7 +1263,7 @@
     const item = state.skills.active[skillAim.index];
     cancelSkillAim();
     if (dist < 12) return;
-    if (skillsBlocked()) return;
+    if (skillsBlocked() || state.invOpen) return;
     if (!item) return;
     const [sx, sy] = vecTo8Dir(dx, dy);
     if (sx === 0 && sy === 0) return;
@@ -1214,7 +1285,7 @@
     const item = state.skills.active[index];
     if (!item) return;
     if (bagDragFrom >= 0) return;
-    if (skillsBlocked()) return;
+    if (skillsBlocked() || state.invOpen) return;
     ev.preventDefault();
     ev.stopPropagation();
     cancelSkillAim();
@@ -1266,7 +1337,7 @@
   }
 
   function playerBasicAttack() {
-    if (skillsBlocked()) return;
+    if (skillsBlocked() || state.invOpen) return;
     const p = state.player;
     if (!p || !p.alive) return;
     if (MD.hasStatus(p, "sleep") || MD.hasStatus(p, "para")) {
@@ -1321,7 +1392,6 @@
       let from = parseInt(raw, 10);
       if (Number.isNaN(from)) from = bagDragFrom;
       if (Number.isNaN(from) || from < 0) return;
-      bagDropConsumedClick = true;
       tryEquipFromBag(kind, index, from);
     });
   }
@@ -1409,7 +1479,6 @@
   }
 
   let bagDragFrom = -1;
-  let bagDropConsumedClick = false;
 
   function clearBagDragOver() {
     const grid = document.getElementById("invGrid");
@@ -1463,7 +1532,6 @@
       if (Number.isNaN(from)) from = bagDragFrom;
       if (Number.isNaN(from) || from < 0) return;
       if (swapBagSlots(from, index)) {
-        bagDropConsumedClick = true;
         renderInv();
       }
     });
@@ -1479,14 +1547,16 @@
       const slot = document.createElement("div");
       slot.className = "slot" + (item ? "" : " empty") + (state.invSelected === i ? " selected" : "");
       slot.dataset.slot = String(i);
+      slot.tabIndex = item ? 0 : -1;
+      slot.setAttribute("role", "button");
+      slot.setAttribute("aria-label", item ? MD.displayName(item) : "空格");
+      slot.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); slot.click(); }
+      });
       const idxLabel = i === 9 ? "0" : String(i + 1);
       fillSlotVisual(slot, item, idxLabel);
       bindBagSlotDnD(slot, i);
       slot.addEventListener("click", () => {
-        if (bagDropConsumedClick) {
-          bagDropConsumedClick = false;
-          return;
-        }
         if (!state.bag[i]) return;
         if (state.whOpen && state.mode === "town") {
           state.warehouse.push(state.bag[i]);
@@ -1505,6 +1575,12 @@
     actions.innerHTML = "";
     const item = state.bag[state.invSelected];
     if (!item) return;
+    if (state.mode === "town") {
+      const hint = document.createElement("p");
+      hint.textContent = MD.displayName(item) + " · 在迷宫内使用，或打开仓库存取。";
+      actions.appendChild(hint);
+      return;
+    }
     const def = MD.ITEM_DEFS[item.type];
     if (!def) return;
     if (def.verbs.includes("eat")) {
@@ -1532,8 +1608,9 @@
   // --- Warehouse ---
   function openWarehouse() {
     if (!state.invOpen) openInv();
+    if (!state.invOpen) return;
     state.whOpen = true;
-    hideOverlay("townOverlay");
+    syncModalState();
     const wh = hudWhEl();
     if (wh) wh.classList.remove("collapsed");
     const hint = document.getElementById("whHint");
@@ -1568,6 +1645,12 @@
     state.warehouse.forEach((it, i) => {
       const slot = document.createElement("div");
       slot.className = "slot";
+      slot.tabIndex = state.mode === "town" ? 0 : -1;
+      slot.setAttribute("role", "button");
+      slot.setAttribute("aria-label", "取出 " + MD.displayName(it));
+      slot.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); slot.click(); }
+      });
       fillSlotVisual(slot, it, "");
       slot.onclick = () => {
         if (state.mode !== "town") return;
@@ -1617,7 +1700,7 @@
   let chordParts = { x: 0, y: 0 };
 
   function handleDirection(sx, sy, shift) {
-    if (paused) return;
+    if (paused || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || (MD.dialogue && MD.dialogue.isOpen()) || (state.invOpen && !state.aiming)) return;
     const [dx, dy] = toWorldDir(sx, sy);
     if (dx === 0 && dy === 0) return;
     if (state.skillAiming) return;
@@ -1640,10 +1723,25 @@
   }
 
   function onKeyDown(e) {
-    if (paused) return;
-    // Native selector/navigation keys must not move the character or enter a run.
-    if (e.target && /^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    if (paused || e.defaultPrevented || (MD.dialogue && MD.dialogue.isOpen())) return;
     const key = e.key;
+    // The topmost modal owns every key, including already queued directions.
+    if (overlayVisible("helpOverlay")) {
+      if (key === "Escape" || key === "h" || key === "H" || key === "?") {
+        e.preventDefault(); hideOverlay("helpOverlay");
+      } else trapModalFocus(e, document.getElementById("helpOverlay"));
+      return;
+    }
+    if (key === "Tab") {
+      if (state.invOpen) trapModalFocus(e, hudInvEl());
+      else if (overlayVisible("endOverlay")) trapModalFocus(e, document.getElementById("endOverlay"));
+      return; // Tab always means keyboard focus navigation.
+    }
+    // Let controls receive their native Enter / Space activation exactly once.
+    if (key !== "Escape" && e.target) {
+      if (/^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+      if (/^(BUTTON|A)$/.test(e.target.tagName) && (key === "Enter" || key === " " || (DIR_KEYS[key] && !state.aiming) || key === "." || key === "g" || key === "G" || key === "5" || key === "Numpad5")) return;
+    }
 
     // Global overlays
     if (key === "Escape") {
@@ -1683,14 +1781,11 @@
     }
 
     if (state.mode === "town") {
-      if (key === "i" || key === "I" || key === "Tab") {
+      if (key === "i" || key === "I") {
         e.preventDefault();
         if (state.invOpen) closeInv();
         else openInv();
         return;
-      }
-      if (key === "Enter" && !state.invOpen) {
-        enterDungeon();
       }
       return;
     }
@@ -1704,7 +1799,7 @@
       return;
     }
 
-    if (key === "i" || key === "I" || key === "Tab") {
+    if (key === "i" || key === "I") {
       e.preventDefault();
       if (state.invOpen) closeInv();
       else openInv();
@@ -1747,6 +1842,8 @@
         return;
       }
     }
+
+    if (state.invOpen && !state.aiming) return;
 
     if (state.aiming) {
       if (DIR_KEYS[key]) {
@@ -1852,6 +1949,37 @@
   document.getElementById("btnEnter").onclick = () => enterDungeon();
   document.getElementById("btnWarehouse").onclick = () => openWarehouse();
 
+  // Town services are host actions; PaperDialogue itself knows nothing about MD.
+  const townActions = new Map([
+    ["warehouse", () => openWarehouse()],
+    ["inventory", () => openInv()],
+  ]);
+  if (window.PaperDialogue && window.MDTownContent) {
+    MD.dialogue = window.PaperDialogue.create({
+      reducedMotion: !!(MD.settings && MD.settings.reducedMotion),
+      onOpen() { clearPendingInput(); syncModalState(); },
+      onClose() { clearPendingInput(); syncModalState(); },
+      onAction(event) {
+        const handler = townActions.get(event.action);
+        if (handler && !paused && state.mode === "town") handler(event);
+      },
+    });
+  }
+  function openTownDialogue(name, trigger) {
+    if (paused || state.mode !== "town" || state.invOpen || overlayVisible("helpOverlay") || !MD.dialogue) return false;
+    const scene = window.MDTownContent.get(name);
+    if (!scene) return false;
+    return MD.dialogue.open(scene, { trigger, context: { npc: name } });
+  }
+  MD.townInteractions = Object.freeze({
+    openDialogue: openTownDialogue,
+    registerAction(name, handler) {
+      if (typeof name !== "string" || !name || typeof handler !== "function") throw new TypeError("A named town action needs a function");
+      if (townActions.has(name)) throw new Error("Town action already registered: " + name);
+      townActions.set(name, handler);
+      return () => townActions.delete(name);
+    },
+  });
   function initTownMap() {
     const root = document.getElementById("townMap");
     if (!root) return;
@@ -1859,21 +1987,13 @@
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         const action = btn.dataset.action;
-        if (action === "enter") {
-          enterDungeon();
-          return;
-        }
-        if (action === "warehouse") {
-          openWarehouse();
-          return;
-        }
-        if (action === "npc") {
-          const name = btn.dataset.npc || "友人";
-          const chip = document.getElementById("townMsg");
-          if (chip) chip.textContent = name + "在镇子里晃悠。点上方入口进迷宫，点 DeepSeek 开仓库。";
-        }
+        if (action === "enter") { enterDungeon(); return; }
+        if (action === "warehouse") { openTownDialogue("DeepSeek", btn); return; }
+        if (action === "npc") openTownDialogue(btn.dataset.npc, btn);
       });
     });
+    const bagButton = document.getElementById("btnTownBag");
+    if (bagButton) bagButton.onclick = openInv;
   }
   initTownMap();
   document.getElementById("btnWhClose").onclick = () => closeWarehouse();
@@ -2037,14 +2157,17 @@
   function resume() {
     paused = false;
     playStarted = performance.now();
-    canvas.focus();
+    syncModalState();
+    const target = overlayVisible("helpOverlay") ? document.getElementById("btnHelpClose")
+      : overlayVisible("endOverlay") ? document.getElementById("btnEndOk")
+      : state.invOpen ? document.getElementById("btnInvClose")
+      : state.mode === "town" ? document.getElementById("stickerChatgpt") : canvas;
+    if (target) target.focus();
   }
   async function pause() {
+    if (MD.dialogue) MD.dialogue.close("menu");
     if (!paused) { playTimeMs += performance.now() - playStarted; paused = true; }
-    state.dashActive = false;
-    state.pendingDash = null;
-    state.keysDown.clear();
-    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+    clearPendingInput();
     // Let an already committed attack/stair/death finish before taking a snapshot.
     while (state.animLock) await new Promise(resolve => setTimeout(resolve, 20));
     cancelSkillAim();
@@ -2080,6 +2203,7 @@
       document.getElementById("endMsg").textContent = state.endKind === "clear" ? "你带着背包里的物品回到了镇子。" : "背包里的物品都丢掉了。仓库仍然保留。";
       showOverlay("endOverlay");
     }
+    syncModalState();
     mountSkillSlots(); renderSkills(); renderInv(); renderWarehouse(); updateUI();
     if (DEBUG) mountDebugPanel();
   }

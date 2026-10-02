@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1100" fill="none">
+<title>纸片小镇装饰底图</title>
+<defs>
+  <pattern id="grain" width="23" height="19" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r=".6" fill="#8b805b" opacity=".13"/><circle cx="16" cy="13" r=".7" fill="#fffdf3" opacity=".8"/><path d="M7 15h3m8-12h2" stroke="#8b805b" stroke-width=".5" opacity=".1"/></pattern>
+  <pattern id="meadow" width="80" height="68" patternUnits="userSpaceOnUse"><path d="m10 34-2-6m2 6 4-4M62 57l-3-6m3 6 3-5" fill="none" stroke="#a3b89a" stroke-width="2" stroke-linecap="round" opacity=".5"/><circle cx="49" cy="20" r="2" fill="#f6ce84" opacity=".7"/></pattern>
+  <symbol id="tree" viewBox="0 0 130 180"><path d="m65 102-5 74h13l-4-74" fill="#ad8f6b"/><path d="m25 93 10 34 34 16 35-23 9-29-17-29-2-32-30-25-30 16-9 34-20 20z" fill="#a9bea5"/><path d="m66 11 1 126 30-19 11-25-17-29-2-31z" fill="#91ad92"/><path d="m43 111 22 17 19-27M65 128V69" stroke="#708f7a" stroke-width="2" opacity=".55" fill="none"/><path d="m28 95 5 17m52-77 4 8" stroke="#d7dfbd" stroke-width="5" stroke-linecap="round"/></symbol>
+  <symbol id="spruce" viewBox="0 0 105 170"><path d="M46 120v47h13v-47" fill="#b09677"/><path d="M54 1 19 55h14L6 101h19L0 142l53 13 51-13-25-41h17L69 55h16z" fill="#7d9f91"/><path d="M54 1v153l50-12-25-41h17L69 55h16z" fill="#709284"/><path d="m34 58 8-2m-12 49 14-3m-20 38 20 3" stroke="#b6c8a6" stroke-width="3" fill="none" stroke-linecap="round"/></symbol>
+  <symbol id="house" viewBox="0 0 230 200"><path d="m35 86 2 108 157-3-3-110" fill="#e4c9a3"/><path d="M41 94h146v94H42z" fill="#f1dbb8"/><path d="m10 90 103-81 104 79-9 13-93-62-94 63z" fill="#bd8180"/><path d="M20 92 112 21l96 71" fill="none" stroke="#a96f72" stroke-width="3"/><path d="m56 65 104 1M77 48h62" stroke="#d6a29a" stroke-width="3"/><path d="M130 148c0-34 44-35 44 0v43h-44z" fill="#baa17d"/><path d="M139 149c0-21 26-21 26 0v40h-26z" fill="#8d8b78"/><circle cx="157" cy="166" r="3" fill="#e8ce9f"/><rect x="62" y="115" width="42" height="40" rx="18" fill="#98b9b3" stroke="#c9ae85" stroke-width="5"/><path d="M82 97v75m-24-36h49" stroke="#f4e4c3" stroke-width="4"/><path d="M48 159h62v10H48z" fill="#bc9776"/><path d="M53 162c-2-17 11-18 14-7 4-23 20-22 22-4 6-13 17-8 15 11" fill="#95af87"/><path d="M174 25V5h20v37" fill="#c9aa93"/></symbol>
+  <symbol id="roofBlue" viewBox="0 0 230 200"><use href="#house"/><path d="m10 90 103-81 104 79-9 13-93-62-94 63z" fill="#8babb6"/><path d="M20 92 112 21l96 71m-149-6 105-1M77 48h62" fill="none" stroke="#6d96a4" stroke-width="3"/></symbol>
+  <symbol id="flowers" viewBox="0 0 95 54"><path d="M11 49c-15-24 10-30 17-9C19 8 47 8 46 32 53 4 79 22 61 43 81 17 98 39 81 50z" fill="#b1bf96"/><g fill="#d99b98"><circle cx="25" cy="33" r="6"/><circle cx="31" cy="26" r="6"/><circle cx="38" cy="33" r="6"/></g><circle cx="31" cy="33" r="4" fill="#f7d99b"/><g fill="#eee0b4"><circle cx="59" cy="31" r="5"/><circle cx="66" cy="27" r="5"/><circle cx="70" cy="34" r="5"/></g><circle cx="65" cy="33" r="3" fill="#d7ad78"/></symbol>
+  <symbol id="cloud" viewBox="0 0 200 70"><path d="M10 63C-5 29 41 18 54 35 52-2 110-8 118 29c33-20 76 0 73 31z" fill="#f4f0df" opacity=".65"/></symbol>
+  <symbol id="stone" viewBox="0 0 60 25"><path d="m3 17 8-11 18-5 22 7 7 11-20 5-29-2z" fill="#c4c2ac"/><path d="m10 15 15-6 21 4" fill="none" stroke="#d9d5bd" stroke-width="3"/></symbol>
+</defs>
+
+<rect width="800" height="1100" rx="25" fill="#f2e8cb"/>
+<path d="M0 50 130 16l126 35 142-42 125 34 153-27 124 32v190H0z" fill="#d8e2c8"/>
+<path d="M0 146 94 104l104 35 127-62 126 57 121-34 139 62 89-30v143H0z" fill="#bdceb7"/>
+<use href="#cloud" x="65" y="40" width="153" height="54"/><use href="#cloud" x="571" y="25" width="161" height="60"/>
+<path d="m0 275 125-20 117 24 114-27 127 25 146-26 171 24v825H0z" fill="#e2e0b8"/>
+<path d="M0 462q112-63 209-15t211-17 233 19 147-17v668H0z" fill="#eee5c1"/>
+<path d="M0 850q157-48 258 18t276 4 266 17v211H0z" fill="#d9dcb2"/>
+<path d="M402 172q-10 131 1 180T190 466M405 352q70 41 126 75t83 36M407 364q-71 181-13 280t8 194-22 236M405 821q-98 6-153 47t-101 40M405 841q96-30 154 26t88 52" fill="none" stroke="#cebd96" stroke-width="63" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M402 172q-10 131 1 180T190 466M405 352q70 41 126 75t83 36M407 364q-71 181-13 280t8 194-22 236M405 821q-98 6-153 47t-101 40M405 841q96-30 154 26t88 52" fill="none" stroke="#f8edce" stroke-width="53" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M405 290v44m-52 67-55 30m193-23 43 34m-172 136 10 39m11 156v48m-35 49-91 14m214-11 53 26" fill="none" stroke="#cdb98d" stroke-width="3" stroke-dasharray="4 13" stroke-linecap="round"/>
+<use href="#house" x="9" y="184" width="234" height="203"/><use href="#roofBlue" x="561" y="194" width="234" height="203"/>
+<use href="#tree" x="207" y="134" width="97" height="138"/><use href="#tree" x="487" y="120" width="104" height="144"/>
+<use href="#spruce" x="0" y="93" width="93" height="151"/><use href="#spruce" x="723" y="97" width="77" height="128"/>
+<path d="M18 642c30-37 113-57 151-16s-5 50 12 78-37 75-85 61-69-13-78-49-21-42 0-74z" fill="#b6c5a3"/><path d="M25 648c25-29 107-48 137-15s-14 46 7 76-43 62-77 47-62-7-66-42-21-39-1-66z" fill="#a5ccd0"/><path d="M33 667h75m-35 55h36m-11-76h39" stroke="#d4e3db" stroke-width="4" stroke-linecap="round"/>
+<use href="#flowers" x="8" y="567" width="106" height="62"/><use href="#flowers" x="674" y="566" width="117" height="67"/>
+<use href="#tree" x="655" y="639" width="133" height="184"/><use href="#flowers" x="240" y="733" width="100" height="57"/>
+<use href="#stone" x="526" y="652" width="62" height="26"/>
+<path d="M0 1038c37-44 80-38 89-10 32-41 87-25 91 28 54-47 119-12 135 44H0zm478 62c15-40 57-60 84-30 11-47 62-57 81-23 28-57 80-54 106-9 22-43 51-40 51-40v102z" fill="#afc29e"/>
+<use href="#flowers" x="27" y="1014" width="134" height="76"/><use href="#flowers" x="665" y="1010" width="118" height="67"/>
+<rect y="298" width="800" height="802" fill="url(#meadow)" opacity=".6"/><rect width="800" height="1100" fill="url(#grain)"/>
+
+</svg>

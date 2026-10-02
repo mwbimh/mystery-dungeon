@@ -307,3 +307,176 @@ test('3D renderer-only actor IDs never enter a save or conflict with strict impo
   assert.deepEqual(save(h), snapshot);
   assert.equal(h.state.player._vid, undefined);
 });
+
+test('A → queued B → A persists the final A and does not lose the dirty checkpoint', async () => {
+  const h = await game(), m = await menu(h);
+  await m.start(1); await m.open();
+  const initial = save(h), write = m.store.write;
+  let release, writes = 0;
+  m.store.write = (...args) => {
+    writes++;
+    return writes === 1 ? new Promise((resolve, reject) => { release = () => write(...args).then(resolve, reject); }) : write(...args);
+  };
+  h.state.warehouse.push(h.MD.makeItem('rock'));
+  const middle = m.save(true);
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  h.state.warehouse.pop(); h.MD.random.setState(initial.rngState);
+  const latest = m.save(true);
+  const whilePending = { prevented: false, preventDefault() { this.prevented = true; } };
+  h.emit('beforeunload', whilePending); assert.equal(whilePending.prevented, true);
+  await release(); await middle; await latest;
+  assert.equal(writes, 2);
+  assert.deepEqual(plain((await m.store.read(1)).snapshot), initial);
+  const settled = { prevented: false, preventDefault() { this.prevented = true; } };
+  h.emit('beforeunload', settled); assert.equal(settled.prevented, false);
+});
+
+test('a newer in-memory change stays dirty after an older queued transaction finishes', async () => {
+  const h = await game(), m = await menu(h);
+  await m.start(1); await m.open();
+  const write = m.store.write; let release;
+  m.store.write = (...args) => new Promise(resolve => { release = () => write(...args).then(resolve); });
+  h.state.warehouse.push(h.MD.makeItem('rock'));
+  const saving = m.save(true);
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  h.state.warehouse.push(h.MD.makeItem('onigiri'));
+  await release(); await saving;
+  const unsaved = { prevented: false, preventDefault() { this.prevented = true; } };
+  h.emit('beforeunload', unsaved); assert.equal(unsaved.prevented, true);
+  assert.equal((await m.store.read(1)).snapshot.warehouse.length, 1);
+});
+
+test('the first menu open stays visible and offers recovery when its flush fails', async () => {
+  const h = await game(), m = await menu(h);
+  await m.start(1);
+  assert.equal(h.get('menuScreen').hidden, true);
+  h.state.warehouse.push(h.MD.makeItem('rock'));
+  m.store.write = async () => { throw new Error('Quota exceeded'); };
+  await m.open();
+  assert.equal(h.get('menuScreen').hidden, false);
+  assert.equal(h.MD.session.isPaused(), true);
+  assert.match(h.get('menuNotice').textContent, /保存失败.*Quota/);
+  assert.ok(descendants(h.get('menuContent')).some(node => node.textContent === '下载当前进度'));
+  assert.equal(h.state.warehouse.length, 1);
+});
+
+test('help and inventory own movement, waiting, pickup, and buffered direction input', async () => {
+  const h = await game(); begin(h);
+  h.state.enemies = [];
+  const checkpoint = save(h);
+  h.key('ArrowRight');
+  h.get('btnHelp').click();
+  for (const key of [' ', '.', 'g', 'Numpad6', 'ArrowDown', 'i']) h.key(key);
+  await h.flushTimers();
+  assert.deepEqual(save(h), checkpoint);
+  assert.equal(h.state.invOpen, false);
+  h.key('Escape');
+  assert.equal(h.get('helpOverlay').classList.contains('hidden'), true);
+  h.key('ArrowLeft'); h.key('i');
+  for (const key of [' ', '.', 'g', 'Numpad6', 'ArrowDown']) h.key(key);
+  await h.flushTimers();
+  assert.deepEqual(save(h), checkpoint);
+  assert.equal(h.state.invOpen, true);
+  h.key('Escape'); h.key(' ');
+  assert.equal(h.state.turn, checkpoint.turn + 1);
+});
+
+test('town Enter and Tab do not start a run or steal focus into inventory', async () => {
+  const h = await game(); h.MD.session.resume();
+  let prevented = false;
+  h.key('Enter'); h.key('Tab', { preventDefault() { prevented = true; } });
+  assert.equal(h.state.mode, 'town'); assert.equal(h.state.invOpen, false);
+  assert.equal(prevented, false);
+  h.key('Enter', { target: { tagName: 'BUTTON' } });
+  assert.equal(h.state.mode, 'town');
+  h.get('btnHelpTown').click(); h.get('btnNewRun').click();
+  assert.equal(h.state.mode, 'town');
+  h.key('Escape'); h.get('btnNewRun').click();
+  assert.equal(h.state.mode, 'dungeon');
+});
+
+test('town inventory and warehouse keep the paper town visible and restore interaction', async () => {
+  const h = await game(); h.MD.session.resume();
+  h.key('i');
+  assert.equal(h.state.invOpen, true);
+  assert.equal(h.get('townOverlay').classList.contains('hidden'), false);
+  assert.equal(h.get('townOverlay').inert, true);
+  assert.equal(h.context.document.body.classList.contains('town-panel-open'), true);
+  h.get('btnWhToggle').click();
+  assert.equal(h.state.whOpen, true);
+  assert.equal(h.get('townOverlay').classList.contains('hidden'), false);
+  h.key('Escape');
+  assert.equal(h.get('townOverlay').inert, false);
+  assert.equal(h.context.document.body.classList.contains('town-panel-open'), false);
+});
+
+test('the first deliberate bag click after drag drop selects or transfers immediately', async () => {
+  const h = await game(); h.MD.session.resume();
+  h.state.bag[0] = h.MD.makeItem('rock');
+  h.state.bag[1] = h.MD.makeItem('onigiri');
+  h.key('i');
+  const transfer = { getData: () => '0', setData() {} };
+  h.get('invGrid').children[1].dispatch('drop', { dataTransfer: transfer });
+  h.get('invGrid').children[0].click();
+  assert.equal(h.state.invSelected, 0);
+  h.get('btnWhToggle').click();
+  h.get('invGrid').children[1].dispatch('drop', { dataTransfer: transfer });
+  const item = h.state.bag[0];
+  h.get('invGrid').children[0].click();
+  assert.equal(h.state.bag[0], null); assert.equal(h.state.warehouse[0].uid, item.uid);
+});
+
+test('unavailable database reads and writes still leave in-memory download recovery reachable', async () => {
+  const h = await game(), m = await menu(h);
+  await m.start(1); h.state.warehouse.push(h.MD.makeItem('rock'));
+  m.store.write = m.store.list = async () => { throw new Error('database connection is closing'); };
+  await m.open();
+  assert.equal(h.get('menuScreen').hidden, false);
+  assert.equal(h.MD.session.isPaused(), true);
+  assert.ok(descendants(h.get('menuContent')).some(node => node.textContent === '下载当前进度'));
+  assert.ok(descendants(h.get('menuContent')).some(node => node.textContent === '回到旅程'));
+  assert.equal(h.get('menuNew').disabled, true);
+  assert.equal(h.get('menuLoad').disabled, true);
+  assert.equal(h.state.warehouse.length, 1);
+});
+
+for (const [type, hotkey] of [['rock', 't'], ['knockStaff', 'z']]) {
+  test(`focused inventory controls still allow ${type} aiming direction`, async () => {
+    const h = await game(); begin(h); h.state.enemies = [];
+    h.state.bag[0] = h.MD.makeItem(type); h.key('i');
+    h.key(hotkey, { target: { tagName: 'BUTTON' } });
+    assert.ok(h.state.aiming);
+    h.key('ArrowRight', { target: { tagName: 'BUTTON' } });
+    assert.equal(h.state.aiming, null);
+    assert.equal(h.state.turn, 1);
+  });
+}
+
+test('opening and closing a modal cancels a held skill gesture before its pointerup', async () => {
+  const h = await game(); begin(h); h.state.enemies = [];
+  const item = h.MD.makeItem('rock'); h.state.skills.active[0] = item;
+  const slot = h.get('skillActive0');
+  const down = { button: 0, buttons: 1, pointerType: 'mouse', clientX: 10, clientY: 10 };
+  slot.dispatch('pointerdown', down); assert.equal(h.state.skillAiming, true);
+  h.key('i'); assert.equal(h.state.skillAiming, false);
+  h.emit('document:pointerup', { clientX: 70, clientY: 10 });
+  assert.equal(h.state.turn, 0); assert.equal(h.state.skills.active[0], item);
+  slot.dispatch('pointerdown', down); assert.equal(h.state.skillAiming, false);
+  h.key('Escape');
+  slot.dispatch('pointerdown', down); assert.equal(h.state.skillAiming, true);
+  h.get('btnHelp').click(); h.key('Escape');
+  h.emit('document:pointerup', { clientX: 70, clientY: 10 });
+  assert.equal(h.state.skillAiming, false);
+  assert.equal(h.state.turn, 0); assert.equal(h.state.skills.active[0], item);
+});
+
+test('menu pause clears a released direction chord before the next tap', async () => {
+  const h = await game(); begin(h); h.state.enemies = [];
+  h.state.player.x = 3; h.state.player.y = 3;
+  for (let y = 2; y <= 4; y++) for (let x = 2; x <= 4; x++) h.state.map.tiles[y][x] = h.MD.TILE.FLOOR;
+  h.key('ArrowUp'); h.emit('keyup', { key: 'ArrowUp' });
+  await h.MD.session.pause(); h.MD.session.resume();
+  h.key('ArrowRight'); h.emit('keyup', { key: 'ArrowRight' }); await h.flushTimers();
+  assert.equal(h.state.player.x, 4); assert.equal(h.state.player.y, 3);
+  assert.equal(h.state.turn, 1);
+});

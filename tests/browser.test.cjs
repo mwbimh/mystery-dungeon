@@ -19,7 +19,7 @@ before(async () => {
     if (relative === '/config/game.json' && generatedOverride) {
       res.setHeader('Content-Type', 'application/json'); res.end(generatedOverride); return;
     }
-    const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
+    const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
     fs.readFile(target, (err, bytes) => {
       if (err) { res.writeHead(404).end(); return; }
       res.setHeader('Content-Type', mime[path.extname(target)] || 'application/octet-stream');
@@ -490,5 +490,226 @@ test('actual default 3D renderer autosaves and reloads without renderer internal
     await page.waitForFunction(() => MDMenu.activeSlot === 1 && !MD.session.isPaused());
     assert.deepEqual(await savedSnapshot(page), expected);
     assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('paper town preserves native keyboard navigation and opens six distinct reusable conversations', async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await loaded(page);
+    fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
+    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-town-desktop.png'), animations: 'disabled', fullPage: true });
+    await page.locator('#btnTownBag').focus(); await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => MD_STATE.invOpen), false);
+    assert.notEqual(await page.evaluate(() => document.activeElement.id), 'btnTownBag');
+    const scenes = new Set();
+    for (const id of ['stickerChatgpt', 'stickerClaude', 'stickerKimi', 'stickerGlm', 'stickerHarness', 'stickerDeepseek']) {
+      await page.locator('#' + id).focus(); await page.keyboard.press('Enter');
+      await page.locator('.pvn-overlay').waitFor();
+      assert.equal(await page.locator('.pvn-choice').first().evaluate(node => getComputedStyle(node).boxShadow), 'none');
+      assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
+      assert.equal(await page.evaluate(() => document.querySelector('.pvn-overlay').contains(document.activeElement)), true);
+      scenes.add(await page.locator('.pvn-text').textContent());
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.querySelector('.pvn-overlay').contains(document.activeElement)), true);
+      if (id === 'stickerChatgpt') await page.screenshot({ path: path.join(ROOT, 'test-results/paper-dialogue-desktop.png'), animations: 'disabled', fullPage: true });
+      await page.keyboard.press('Escape');
+      await page.locator('.pvn-overlay').waitFor({ state: 'detached' });
+      assert.equal(await page.evaluate(() => document.activeElement.id), id);
+      assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
+    }
+    assert.equal(scenes.size, 6);
+    assert.equal(await page.locator('#stickerChatgpt').evaluate(node => getComputedStyle(node).boxShadow), 'none');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('town inventory keeps its paper background; dialogue action opens warehouse and restores the town', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await loaded(page);
+    await page.locator('#btnTownBag').click();
+    assert.equal(await page.evaluate(() => MD_STATE.invOpen), true);
+    assert.equal(await page.locator('#townOverlay').isVisible(), true);
+    assert.equal(await page.locator('#hudInv').isVisible(), true);
+    assert.equal(await page.locator('#aimHint').isVisible(), false);
+    assert.equal(await page.evaluate(() => document.getElementById('hudInv').parentElement === document.body), true);
+    assert.equal(await page.evaluate(() => {
+      const panel = document.getElementById('hudInv'), r = panel.getBoundingClientRect();
+      return panel.contains(document.elementFromPoint(r.left + 25, r.top + 25));
+    }), true, 'inventory is actually above the town stacking context');
+    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-town-inventory.png'), animations: 'disabled', fullPage: true });
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.getElementById('townOverlay').inert), false);
+    await page.locator('#stickerDeepseek').click();
+    await page.locator('.pvn-choice[data-choice="warehouse"]').click();
+    assert.equal(await page.locator('.pvn-overlay').count(), 0);
+    assert.equal(await page.evaluate(() => MD_STATE.whOpen), true);
+    assert.equal(await page.locator('#townOverlay').isVisible(), true);
+    await page.keyboard.press('Escape');
+    await page.locator('#stickerKimi').click();
+    await page.locator('.pvn-choice[data-choice="movement"]').click();
+    assert.match(await page.locator('.pvn-text').textContent(), /方向键/);
+    await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => MD.dialogue.isOpen()), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
+  } finally { await context.close(); }
+});
+
+test('help and bag modals block all gameplay keys and the first post-drag click works', async () => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await loaded(page, '?designer=1&seed=42&flat=1');
+    await page.evaluate(() => { MD_STATE.enemies = []; MD_STATE.bag[0] = MD.makeItem('rock'); MD_STATE.bag[1] = MD.makeItem('onigiri'); });
+    const before = await savedSnapshot(page);
+    await page.locator('#btnHelp').click();
+    await page.locator('#helpOverlay').evaluate(node => { node.tabIndex = -1; node.focus(); });
+    for (const key of ['Space', '.', 'g', 'ArrowRight', 'w', 'i', 'Enter']) await page.keyboard.press(key);
+    await page.waitForTimeout(80);
+    assert.deepEqual(await savedSnapshot(page), before);
+    await page.keyboard.press('Escape');
+    await page.locator('#game').focus(); await page.keyboard.press('i');
+    await page.locator('#hudInv').evaluate(node => { node.tabIndex = -1; node.focus(); });
+    for (const key of ['Space', '.', 'g', 'ArrowRight', 'w']) await page.keyboard.press(key);
+    assert.deepEqual(await savedSnapshot(page), before);
+    await page.locator('#invGrid .slot[data-slot="0"]').dragTo(page.locator('#invGrid .slot[data-slot="1"]'));
+    assert.equal(await page.evaluate(() => MD_STATE.bag[0].type), 'onigiri');
+    await page.locator('#invGrid .slot[data-slot="0"]').click();
+    assert.equal(await page.evaluate(() => MD_STATE.invSelected), 0);
+    await page.keyboard.press('Escape');
+    await page.locator('#game').focus(); await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => MD_STATE.turn), before.turn + 1);
+  } finally { await context.close(); }
+});
+
+test('a failing first menu flush leaves visible download recovery instead of a frozen hidden game', async () => {
+  const context = await browser.newContext({ acceptDownloads: true });
+  const page = await context.newPage();
+  try {
+    await loaded(page);
+    await page.evaluate(() => {
+      MD_STATE.warehouse.push(MD.makeItem('rock'));
+      MDMenu.store.write = MDMenu.store.list = async () => { throw new Error('Simulated database closure'); };
+    });
+    await page.locator('#btnSessionMenu').click(); await menuIdle(page);
+    assert.equal(await page.locator('#menuScreen').isVisible(), true);
+    assert.match(await page.locator('#menuNotice').textContent(), /保存失败/);
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下载当前进度', exact: true }).click();
+    const downloaded = await downloading;
+    const envelope = JSON.parse(fs.readFileSync(await downloaded.path(), 'utf8'));
+    assert.ok(JSON.stringify(envelope).includes('rock'));
+    assert.equal(await page.evaluate(() => MD_STATE.warehouse.length), 1);
+  } finally { await context.close(); }
+});
+
+test('paper town, inventory and visual novel remain reachable on a narrow touch viewport', async () => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await loaded(page);
+    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-town-mobile.png'), animations: 'disabled', fullPage: true });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    for (const id of ['stickerEntrance', 'stickerChatgpt', 'stickerClaude', 'stickerKimi', 'stickerGlm', 'stickerHarness', 'stickerDeepseek']) {
+      const box = await page.locator('#' + id).boundingBox();
+      assert.ok(box.width >= 44 && box.height >= 44 && box.x >= 0 && box.x + box.width <= 391, id + ' usable hit target');
+    }
+    await page.locator('#stickerClaude').tap();
+    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-dialogue-mobile.png'), animations: 'disabled', fullPage: true });
+    const card = await page.locator('.pvn-card').boundingBox();
+    assert.ok(card.x >= 0 && card.x + card.width <= 391 && card.y >= 0 && card.y + card.height <= 844);
+    await page.locator('.pvn-close').tap();
+    await page.locator('#btnTownBag').tap(); await page.locator('#btnWhToggle').tap();
+    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-town-inventory-mobile.png'), animations: 'disabled', fullPage: true });
+    const inv = await page.locator('#hudInv').boundingBox();
+    assert.ok(inv.x >= 0 && inv.x + inv.width <= 391 && inv.y >= 0 && inv.y + inv.height <= 844);
+    await page.locator('#btnInvClose').tap();
+    assert.equal(await page.evaluate(() => document.getElementById('townOverlay').inert), false);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('all dungeon paper themes render with an actual WebGL context and unchanged movement rules', async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await loaded(page, '?designer=1&dungeon=original&seed=42&debug=1');
+    assert.equal(await page.evaluate(() => !!document.getElementById('game').getContext('webgl2')), true);
+    const floors = await page.evaluate(() => {
+      const seen = new Set(), result = [];
+      for (let floor = 1; floor <= MD.config.dungeons.original.totalFloors; floor++) {
+        const id = MD.floorConfig(floor).themeId;
+        if (!seen.has(id)) { seen.add(id); result.push({ floor, id }); }
+      }
+      return result;
+    });
+    for (const { floor, id } of floors) {
+      await page.evaluate(floor => MD.debugFloor(floor), floor);
+      await page.waitForTimeout(180);
+      await page.screenshot({ path: path.join(ROOT, 'test-results/paper-dungeon-' + id + '.png'), animations: 'disabled', fullPage: true });
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-dungeon-mobile.png'), animations: 'disabled', fullPage: true });
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('paper town five-size layout keeps the background registered and all seven stickers separate', async () => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await loaded(page);
+    for (const [name, width, height] of [['wide',1440,900],['laptop',1280,720],['phone',390,844],['small',320,640],['landscape',844,390]]) {
+      await page.setViewportSize({ width, height });
+      await page.evaluate(() => { document.getElementById('townOverlay').scrollTop = 0; });
+      const layout = await page.evaluate(() => {
+        const rect = node => { const r = node.getBoundingClientRect(); return { x:r.x,y:r.y,width:r.width,height:r.height }; };
+        const town = document.getElementById('townOverlay');
+        return { scene:rect(document.querySelector('.town-scene')), image:rect(document.querySelector('.town-map-bg')),
+          overflow:town.scrollWidth > town.clientWidth, targets:[...document.querySelectorAll('.town-sticker')].map(node => ({id:node.id,...rect(node)})),
+          choice:rect(document.querySelector('.dungeon-choice')), heading:rect(document.querySelector('.town-heading')), session:rect(document.querySelector('.session-controls')) };
+      });
+      assert.equal(layout.overflow, false, name + ' horizontal overflow');
+      assert.ok(layout.session.y + layout.session.height <= layout.heading.y || layout.session.x >= layout.heading.x + layout.heading.width || layout.session.x + layout.session.width <= layout.heading.x, name + ' session bar must not cover town heading or tools');
+      for (const prop of ['x','y','width','height']) assert.ok(Math.abs(layout.scene[prop] - layout.image[prop]) < 1, name + ' image registration');
+      assert.ok(layout.choice.y >= layout.scene.y + layout.scene.height, name + ' departure cannot cover scene');
+      for (let i = 0; i < layout.targets.length; i++) for (let j = i + 1; j < layout.targets.length; j++) {
+        const a = layout.targets[i], b = layout.targets[j];
+        const overlapX = Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x);
+        const overlapY = Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);
+        assert.ok(overlapX <= 1 || overlapY <= 1, name + ' overlapping hit targets ' + a.id + '/' + b.id);
+      }
+      await page.screenshot({ path:path.join(ROOT,'test-results/paper-layout-' + name + '.png'), animations:'disabled',fullPage:true });
+      if (name === 'small' || name === 'landscape') {
+        await page.locator('#btnNewRun').scrollIntoViewIfNeeded();
+        await page.screenshot({ path:path.join(ROOT,'test-results/paper-layout-' + name + '-departure.png'), animations:'disabled',fullPage:true });
+      }
+    }
+  } finally { await context.close(); }
+});
+
+
+test('inventory keyboard throw and staff aim work after focus moves onto the close button', async () => {
+  const context = await browser.newContext(); const page = await context.newPage();
+  try {
+    await loaded(page, '?designer=1&seed=42&flat=1');
+    for (const [type, key] of [['rock','t'],['knockStaff','z']]) {
+      const before = await page.evaluate(type => { MD_STATE.enemies = []; MD_STATE.bag[0] = MD.makeItem(type); return MD_STATE.turn; }, type);
+      await page.locator('#btnInv').click();
+      await page.locator('#invGrid .slot[data-slot="0"]').click();
+      await page.locator('#btnInvClose').focus(); await page.keyboard.press(key);
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
+      await page.keyboard.press('ArrowRight');
+      assert.equal(await page.evaluate(() => MD_STATE.aiming), null);
+      assert.equal(await page.evaluate(() => MD_STATE.turn), before + 1);
+    }
   } finally { await context.close(); }
 });
