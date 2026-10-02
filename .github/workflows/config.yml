@@ -1,17 +1,47 @@
-name: Validate workbook and game
+name: Validate and release
+
 on:
   pull_request:
+    branches: [preview, main]
   push:
-    branches: [main]
+    branches: [preview, main]
+
+# PRs and preview builds never receive deployment permissions.
 permissions:
   contents: read
+
+concurrency:
+  group: validate-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  validate:
+  release-route:
+    name: Release route
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check design to preview and preview to main
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 tools/check_release_route.py
+
+  validate:
+    name: Validate workbook and game
+    needs: release-route
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -22,15 +52,58 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: python -m pip install -r requirements-dev.txt
-      - run: python tools/install_luban.py
+      - name: Install pinned configuration dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Install checksum-verified Luban 5.1.0
+        run: python tools/install_luban.py
       - run: npm ci
-      - run: npm run check
-      - run: npm run build
+      - name: Convert Excel and validate runtime JSON, syntax, assets and unit tests
+        run: npm run check
+      - name: Build static runtime from this commit's workbooks
+        run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
-      - uses: actions/upload-artifact@v4
+      - name: Test browser gameplay and independent static build
+        run: npm run test:browser
+      - name: Record exact build provenance
+        env:
+          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python tools/write_build_info.py
+      - name: Upload tested static build for review or Sites preview
+        uses: actions/upload-artifact@v4
         with:
-          name: mystery-dungeon-static
+          name: mystery-dungeon-static-${{ github.sha }}
           path: dist/
           if-no-files-found: error
+          retention-days: 14
+      - name: Package production artifact for GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/
+
+  deploy-pages:
+    name: Deploy production Pages
+    # This job can never deploy a pull request or the preview branch.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages-production
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Read Pages configuration (must already use GitHub Actions)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: false
+      - name: Deploy the validated artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -57,7 +57,7 @@ python tools/convert_config.py --workbook /tmp/experiment.xlsx --texts config/te
 
 ## 工程约定与验收
 
-CI 使用同一组本地命令：PR 检查转换/测试/构建，main push（包含合并）从该次提交的工作簿重新生成配置后构建产物。无需写回 main 或机器凭据。工作簿二进制冲突不自动拼接：由单一编辑者在最新版本中重放双方改动，重新执行校验，并通过导出 JSON 对比确认修改内容。
+CI 使用同一组本地命令：`design → preview` 与 `preview → main` PR 检查转换/测试/构建；preview/main push（包含合并）从该次提交的工作簿重新生成配置后构建产物。正式版仅在人工确认后的 main 合并通过全部检查时部署到 GitHub Pages，私有预览通过 Sites 发布，见 [完整发布流程](release-pipeline.md)。无需写回 main 或机器凭据。工作簿二进制冲突不自动拼接：由单一编辑者在最新版本中重放双方改动，重新执行校验，并通过导出 JSON 对比确认修改内容。
 
 常用验收：把 Settings 的 `player.hp` 改为 42，保存并转换，确认 JSON 的 `player.hp` 为 42；刷新游戏开新局确认血量，再恢复原表并重建。改变地图/生成/伤害规则还需多楼层试玩，校验成功不等于平衡或美术已验收。单元测试涵盖非法值、公式、引用、结构、权重、确定性和失败不覆盖；浏览器集成验证情况见本次交付记录。
 
