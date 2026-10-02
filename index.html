@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>迷宫</title>
+  <link rel="stylesheet" href="css/style.css?v=59" />
+</head>
+<body>
+  <div class="app">
+    <div class="board-wrap">
+      <canvas id="game" width="960" height="640" tabindex="0" aria-label="迷宫游戏区域"></canvas>
+      <canvas id="overlay" width="960" height="640" aria-hidden="true"></canvas>
+      <div class="hover-info" id="hoverInfo"></div>
+
+      <aside class="hud hud-left" id="hudStats">
+        <div class="hud-vitals">
+          <div class="hud-avatar" title="角色">
+            <img class="hud-avatar-face" id="hudAvatar" src="assets/runtime/ui/avatar-face.png?v=49" alt="">
+            <div class="hud-floor-chip" id="statFloor">镇子</div>
+          </div>
+          <div class="hud-bars">
+            <div class="gbar hp" id="barHp"><span></span><em id="statHp">30/30</em></div>
+            <div class="gbar belly" id="barBelly"><span></span><em id="statBelly">100/100</em></div>
+            <div class="hud-turn">回合 <span id="statTurn">0</span></div>
+            <div class="status-pills" id="statusPills"></div>
+          </div>
+          <button type="button" class="hud-help" id="btnHelp" title="帮助">?</button>
+        </div>
+        <button type="button" class="hud-bag" id="btnInv" title="背包 (I)">
+          <img src="assets/runtime/ui/bag.png" alt="背包">
+        </button>
+        <button type="button" class="hud-town" id="btnTown" hidden>回镇子</button>
+      </aside>
+
+      <aside class="hud hud-inv collapsed" id="hudInv">
+        <div class="hud-inv-body">
+          <div class="hud-pane-head">
+            <h2>背包</h2>
+            <div class="hud-pane-actions">
+              <button type="button" class="hud-seal" id="btnWhToggle">仓库</button>
+              <button type="button" class="hud-seal" id="btnInvClose">收起</button>
+            </div>
+          </div>
+          <div class="inv-grid" id="invGrid"></div>
+          <div class="inv-actions" id="invActions"></div>
+          <div class="aim-hint hidden" id="aimHint">选择方向 · Esc 取消</div>
+        </div>
+        <div class="hud-wh collapsed" id="hudWh">
+          <div class="hud-pane-head">
+            <h2>仓库</h2>
+            <button type="button" class="hud-seal" id="btnWhClose">收起</button>
+          </div>
+          <p class="wh-hint" id="whHint">点击物品在背包与仓库之间移动。</p>
+          <div class="wh-grid" id="whStore"></div>
+        </div>
+      </aside>
+
+      <aside class="hud hud-log" id="hudLog">
+        <div class="hud-pane-head">
+          <h2>日志</h2>
+          <button type="button" class="hud-seal" id="btnLogToggle">收起</button>
+        </div>
+        <div class="log" id="log"></div>
+      </aside>
+
+      <div class="hud hud-skills" id="hudSkills">
+        <div class="skill-group" data-group="active">
+          <div class="skill-row" id="skillActiveRow"></div>
+          <div class="skill-label">主动</div>
+        </div>
+        <div class="skill-group skill-group-basic" data-group="basic">
+          <div class="skill-row">
+            <div class="skill-slot skill-slot-basic" id="skillBasic" data-kind="basic" title="普攻">
+              <img class="slot-icon" src="assets/runtime/ui/skill-basic.png?v=47" alt="普攻" draggable="false">
+            </div>
+          </div>
+          <div class="skill-label">普攻</div>
+        </div>
+        <div class="skill-group" data-group="passive">
+          <div class="skill-row" id="skillPassiveRow"></div>
+          <div class="skill-label">被动</div>
+        </div>
+      </div>
+      <div id="skillAimLine" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <!-- Town map (pre-dungeon hub) -->
+  <div class="overlay town-overlay" id="townOverlay">
+    <div class="town-map" id="townMap">
+      <img class="town-map-bg" src="assets/runtime/ui/town/town-map.png?v=59" alt="镇子地图" draggable="false">
+      <button type="button" class="town-sticker" id="stickerEntrance" data-action="enter" title="迷宫入口"
+        style="left:50%;top:7%;width:12%;">
+        <img class="idle" src="assets/runtime/ui/town/entrance-idle.png?v=59" alt="入口" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/entrance-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">迷宫入口</span>
+      </button>
+      <button type="button" class="town-sticker" id="stickerChatgpt" data-action="npc" data-npc="ChatGPT" title="ChatGPT"
+        style="left:18%;top:28%;width:10%;">
+        <img class="idle" src="assets/runtime/ui/town/chatgpt-idle.png?v=59" alt="ChatGPT" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/chatgpt-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">GPT</span>
+      </button>
+      <button type="button" class="town-sticker" id="stickerClaude" data-action="npc" data-npc="Claude" title="Claude"
+        style="left:72%;top:26%;width:10%;">
+        <img class="idle" src="assets/runtime/ui/town/claude-idle.png?v=59" alt="Claude" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/claude-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">Claude</span>
+      </button>
+      <button type="button" class="town-sticker" id="stickerKimi" data-action="npc" data-npc="Kimi" title="Kimi"
+        style="left:22%;top:58%;width:10%;">
+        <img class="idle" src="assets/runtime/ui/town/kimi-idle.png?v=59" alt="Kimi" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/kimi-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">Kimi</span>
+      </button>
+      <button type="button" class="town-sticker" id="stickerGlm" data-action="npc" data-npc="GLM" title="GLM / Z.ai"
+        style="left:70%;top:56%;width:10%;">
+        <img class="idle" src="assets/runtime/ui/town/glm-idle.png?v=59" alt="GLM" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/glm-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">GLM</span>
+      </button>
+      <button type="button" class="town-sticker" id="stickerHarness" data-action="npc" data-npc="DeepSeek Harness" title="DeepSeek Harness"
+        style="left:48%;top:40%;width:11%;">
+        <img class="idle" src="assets/runtime/ui/town/harness-idle.png?v=59" alt="Harness" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/harness-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">Harness</span>
+      </button>
+      <button type="button" class="town-sticker town-sticker-self" id="stickerDeepseek" data-action="warehouse" title="DeepSeek · 仓库"
+        style="left:50%;bottom:2%;top:auto;width:14%;">
+        <img class="idle" src="assets/runtime/ui/town/deepseek-idle.png?v=59" alt="DeepSeek" draggable="false">
+        <img class="hov" src="assets/runtime/ui/town/deepseek-hover.png?v=59" alt="" draggable="false">
+        <span class="town-label">DeepSeek · 仓库</span>
+      </button>
+      <div class="town-msg-chip" id="townMsg">欢迎来到镇子。点上面入口进迷宫，点自己开仓库。</div>
+      <button type="button" class="town-help" id="btnHelpTown" title="帮助">?</button>
+      <!-- keep legacy ids for keyboard shortcuts -->
+      <button type="button" id="btnEnter" hidden>进入迷宫</button>
+      <button type="button" id="btnWarehouse" hidden>仓库</button>
+    </div>
+  </div>
+
+  <!-- Help -->
+  <div class="overlay hidden" id="helpOverlay">
+    <div class="modal">
+      <h2>操作说明</h2>
+      <dl class="help-list">
+        <dt>移动</dt><dd>方向键 / WASD（四向），小键盘 1–9（八向），同时按两键可斜向</dd>
+        <dt>等待</dt><dd>空格 / . / 小键盘 5</dd>
+        <dt>冲刺</dt><dd>按住 Shift + 方向，遇岔路、敌人视野、物品或墙停下</dd>
+        <dt>攻击</dt><dd>撞到敌人即近战</dd>
+        <dt>拾取</dt><dd>踩上自动拾取；也可按 G</dd>
+        <dt>道具</dt><dd>I / Tab 展开背包 · 吃 / 扔 / 挥（杖）</dd>
+        <dt>技能栏</dt><dd>击退之杖、石头可拖到主动栏；右键卸下（消失）；单击普攻攻击面向格；杖和石头按住向外拖瞄准释放。睡眠草和饭团只在背包里用</dd>
+        <dt>仓库</dt><dd>背包展开后点「仓库」，从背包右侧滑出</dd>
+        <dt>楼梯</dt><dd>踩上下楼楼梯即前往下一层（第 8 层出口通关）</dd>
+        <dt>视角</dt><dd>俯视角固定，右键 / Q / E 绕主角水平旋转，滚轮缩放。方向键与 WASD 按镜头方向移动（上键往画面深处走）</dd>
+        <dt>死亡</dt><dd>HP 归零丢掉背包返回镇子，仓库保留</dd>
+      </dl>
+      <div class="actions">
+        <button type="button" class="ghost" id="btnHelpClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Death / Clear -->
+  <div class="overlay hidden" id="endOverlay">
+    <div class="modal">
+      <h2 id="endTitle">倒下了</h2>
+      <p id="endMsg"></p>
+      <div class="actions">
+        <button type="button" id="btnEndOk">返回镇子</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
+    var v = "65";
+    var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
+    if (!flat) {
+      files.unshift("vendor/three.min.js");
+      files.push("js/sprites.js?v=" + v, "js/view3d.js?v=" + v);
+    }
+    files.push("js/ui.js?v=" + v, "js/game.js?v=" + v);
+    function load(i) {
+      if (i >= files.length) return;
+      var s = document.createElement("script");
+      s.src = files[i];
+      s.onload = function () { load(i + 1); };
+      s.onerror = function () {
+        console.error("failed", files[i]);
+        if (files[i].indexOf("three") >= 0 || files[i].indexOf("view3d") >= 0 || files[i].indexOf("sprites") >= 0) {
+          load(i + 1);
+        }
+      };
+      document.body.appendChild(s);
+    }
+    load(0);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "cell": [
+    256,
+    304
+  ],
+  "charHeight": 280,
+  "footPad": 16,
+  "cols": 8,
+  "rows": 4,
+  "sheet": [
+    2048,
+    1216
+  ],
+  "directions": [
+    "S",
+    "SE",
+    "E",
+    "NE",
+    "N",
+    "NW",
+    "W",
+    "SW"
+  ],
+  "idleFrameMs": 180
+}
