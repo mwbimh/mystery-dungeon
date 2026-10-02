@@ -1,0 +1,181 @@
+/* Scoped to the optional opening; loading this stylesheet alone fetches no art. */
+.md-opening {
+  position: fixed; inset: 0; z-index: 18000; overflow: hidden;
+  background: #102526; color: #f4ecd4; isolation: isolate;
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  touch-action: manipulation; cursor: pointer;
+}
+.md-opening *, .md-opening *::before, .md-opening *::after { box-sizing: border-box; }
+.md-opening-theatre, .md-opening-shot { position: absolute; inset: 0; overflow: hidden; }
+.md-opening-shot { opacity: 0; transition: opacity 900ms ease; pointer-events: none; }
+.md-opening[data-scene="lantern"] .md-opening-night,
+.md-opening[data-scene="passage"] .md-opening-passage,
+.md-opening[data-scene="title"] .md-opening-title { opacity: 1; }
+.md-opening-night { background: radial-gradient(ellipse at 50% 44%, #24423c, #0e2326 60%, #09181e); }
+.md-opening-orbit {
+  position: absolute; left: 50%; top: 43%; width: min(52vw, 440px); aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(45deg); border: 1px solid #a6bca51e;
+  box-shadow: 0 0 0 60px #a6bca505, 0 0 0 61px #a6bca514, 0 0 0 120px #a6bca503;
+}
+.md-opening-lantern-glow {
+  position: absolute; left: 50%; top: 44%; width: min(75vw, 600px); aspect-ratio: 1;
+  background: radial-gradient(circle, #ffcd7545, #cbaa5320 25%, transparent 63%);
+  transform: translate(-50%, -50%); animation: md-opening-light 3.2s ease-out both;
+}
+.md-opening-lantern {
+  position: absolute; left: 50%; top: 44%; height: clamp(140px, 29vh, 260px); aspect-ratio: 203 / 320;
+  transform: translate(-50%, -50%); transform-origin: center top;
+  animation: md-opening-sway 6s ease-in-out both;
+}
+.md-opening-lantern img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 24px #ffcf7040); }
+.md-opening-caption {
+  position: absolute; inset: auto 20px 21%; margin: 0; text-align: center;
+  font-size: clamp(16px, 2vw, 22px); letter-spacing: .28em; text-indent: .28em;
+  color: #ece8ce; text-shadow: 0 2px 15px #0008;
+}
+.md-opening-passage { background: radial-gradient(ellipse at 50% 42%, #aacaa2, #436158 29%, #172e32 65%); }
+.md-opening-corridor { position: absolute; inset: 0; perspective: 700px; transform: scale(1.02); }
+.md-opening[data-scene="passage"] .md-opening-corridor { animation: md-opening-dolly 5s ease-out both; }
+.md-opening-floor {
+  position: absolute; width: 180%; height: 100%; left: -40%; top: 54%;
+  transform: rotateX(68deg); transform-origin: center top;
+  background: linear-gradient(#17313140, #132b2cea), url('../assets/runtime/tex/ruins-floor.png') center / 340px;
+}
+.md-opening-portal {
+  position: absolute; top: 28%; bottom: 26%; left: 42%; width: 16%;
+  border-radius: 50% 50% 5% 5%; background: linear-gradient(#f3e6b7, #b9d8a6 48%, #759a87);
+  box-shadow: 0 0 70px 30px #d2e1a622;
+}
+.md-opening-arch {
+  position: absolute; width: 74%; height: 108%; left: 13%; top: 5%;
+  border: clamp(40px, 8vw, 120px) solid #334d45; border-bottom: 0; border-radius: 49% 49% 0 0;
+  box-shadow: inset 0 0 0 2px #d8d0a923, 0 0 0 2px #081f2477, 0 18px 35px #08171b99;
+}
+@supports (mask-composite: exclude) {
+  .md-opening-arch {
+    border-color: transparent;
+    background: linear-gradient(90deg, #18383666, #455d4266), url('../assets/runtime/tex/ruins-wall.png') center / 420px;
+    /* Keep only the textured border, with a transparent aperture. */
+    mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+}
+.md-opening-arch-0 { transform: scale(.4); transform-origin: 50% 57%; opacity: .65; }
+.md-opening-arch-1 { transform: scale(.7); transform-origin: 50% 57%; opacity: .82; }
+.md-opening-arch-2 { opacity: .95; }
+.md-opening-traveller {
+  position: absolute; left: 50%; top: 62%; --sprite-width: clamp(100px, 15vw, 180px);
+  width: var(--sprite-width); height: calc(var(--sprite-width) * 1.1875);
+  transform: translate(-50%, -50%); filter: brightness(.8);
+}
+.md-opening-sprite {
+  position: absolute; inset: 0; background: url('../assets/runtime/player/idle.png') no-repeat;
+  background-size: 800% 400%; background-position: 57.142857% 0;
+}
+.md-opening-traveller-shadow { position: absolute; inset: auto 10% 1%; height: 8%; background: #071918b3; border-radius: 50%; filter: blur(5px); }
+.md-opening-passage .md-opening-caption { bottom: 13%; }
+.md-opening-title { background: #f0eddf; color: #243f48; }
+.md-opening-title::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 44% 30%, transparent 30%, #b7ae851b 100%);
+}
+.md-opening-map-lines {
+  position: absolute; inset: -40%; opacity: .4; transform: rotate(-20deg);
+  background-image: linear-gradient(#74887d20 1px, transparent 1px), linear-gradient(90deg, #74887d20 1px, transparent 1px);
+  background-size: 90px 90px;
+}
+.md-opening-disc {
+  position: absolute; left: 17%; top: 12%; width: min(70vh, 50vw); aspect-ratio: 1;
+  border: 1px solid #b09b6699; border-radius: 50%; box-shadow: 0 0 0 22px #a9b5a119, 0 0 0 23px #b09b6636;
+}
+.md-opening-portrait {
+  position: absolute; width: min(54vw, 720px); height: 94%; left: 4%; bottom: -4%;
+  mix-blend-mode: multiply;
+  mask-image: linear-gradient(to bottom, #000 89%, transparent);
+}
+.md-opening-full-art { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+.md-opening-full-art[hidden], .md-opening-lantern img[hidden] { display: none; }
+.md-opening[data-scene="title"] .md-opening-portrait { animation: md-opening-reveal 5.6s cubic-bezier(.2,.65,.3,1) both; }
+.md-opening-lockup {
+  position: absolute; left: 54%; top: 49%; width: 38%; text-align: center;
+  transform: translateY(-50%); z-index: 1;
+}
+.md-opening-compass {
+  display: block; margin: 0 auto 22px; width: 21px; height: 21px; border: 1px solid #a78e58;
+  transform: rotate(45deg); box-shadow: inset 0 0 0 5px #f0eddf; background: #a78e58;
+}
+.md-opening-chapter { font-size: clamp(9px, .82vw, 11px); font-weight: 650; letter-spacing: .24em; color: #807954; margin: 0 0 18px; }
+.md-opening-game-title { color: #29434c; font-family: "Songti SC", "Noto Serif SC", "STSong", serif; font-size: clamp(68px, 10vw, 132px); font-weight: 500; letter-spacing: .2em; text-indent: .2em; margin: 0; line-height: 1.1; }
+.md-opening-roman-title { font-size: clamp(10px, 1.2vw, 16px); letter-spacing: .2em; margin: 20px 0 0; }
+.md-opening-rule { display: block; width: 60px; height: 1px; background: #aa9464; margin: 27px auto; }
+.md-opening-subtitle { margin: 0; font-size: clamp(12px, 1.3vw, 17px); letter-spacing: .12em; line-height: 1.8; }
+.md-opening-lockup.is-english .md-opening-game-title { font-size: clamp(36px, 5vw, 74px); letter-spacing: .01em; text-indent: 0; }
+.md-opening[data-scene="title"] .md-opening-lockup { animation: md-opening-lockup 1.8s ease-out both; }
+.md-opening[data-art="fallback"] .md-opening-lockup { left: 25%; width: 50%; }
+.md-opening-motes { position: absolute; inset: 0; pointer-events: none; opacity: .6; }
+.md-opening-motes i {
+  position: absolute; left: calc(8% + var(--i) * 7.3%); top: calc(15% + var(--i) * 5.4%);
+  width: 3px; height: 3px; border-radius: 50%; background: #f4d292;
+  animation: md-opening-mote 9s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -500ms);
+}
+.md-opening-vignette { position: absolute; inset: 0; box-shadow: inset 0 0 12vw #051a1c55; pointer-events: none; opacity: .8; transition: opacity 1s; }
+.md-opening[data-scene="title"] .md-opening-vignette { opacity: 0; }
+.md-opening-letterbox { position: absolute; left: 0; right: 0; height: max(6vh, 30px); background: #0e2226; }
+.md-opening-letterbox-top { top: 0; }.md-opening-letterbox-bottom { bottom: 0; }
+.md-opening-controls {
+  position: absolute; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 18px; z-index: 2;
+}
+.md-opening-hint { color: #e6e1cc; font-size: 12px; opacity: .7; }
+.md-opening-skip {
+  min-height: 44px; padding: 10px 19px; border: 1px solid #c8d1bc70; border-radius: 3px;
+  color: #f2f0df; background: #193538ed; box-shadow: none; font-size: 13px; font-weight: 500; letter-spacing: .08em;
+}
+.md-opening-skip:hover { background: #2f5050; filter: none; }
+.md-opening-skip:focus-visible { outline: 2px solid #e7c980; outline-offset: 4px; }
+.md-opening-progress { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #d7c18b1a; }
+.md-opening-progress span { display: block; height: 100%; background: #cbb779; transform-origin: left; animation: md-opening-progress 12s linear both; }
+
+@keyframes md-opening-light { from { opacity: 0; transform: translate(-50%, -50%) scale(.65); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } }
+@keyframes md-opening-sway { from { opacity: 0; transform: translate(-50%, -47%) rotate(-4deg); } 20% { opacity: 1; } to { opacity: 1; transform: translate(-50%, -50%) rotate(3deg); } }
+@keyframes md-opening-dolly { from { transform: scale(1); } to { transform: scale(1.14); } }
+@keyframes md-opening-reveal { from { transform: translateX(-2%) scale(1.04); opacity: 0; } 20% { opacity: 1; } to { transform: none; opacity: 1; } }
+@keyframes md-opening-lockup { from { opacity: 0; transform: translateY(calc(-50% + 10px)); } 30% { opacity: 0; } to { opacity: 1; transform: translateY(-50%); } }
+@keyframes md-opening-mote { from { transform: translate3d(0, 16px, 0); opacity: .2; } to { transform: translate3d(12px, -30px, 0); opacity: .8; } }
+@keyframes md-opening-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+@media (max-width: 600px) {
+  .md-opening-letterbox { height: 6%; }
+  .md-opening-caption { bottom: 23%; }
+  .md-opening-arch { width: 112%; left: -6%; }
+  .md-opening-portal { width: 30%; left: 35%; }
+  .md-opening-traveller { --sprite-width: 130px; }
+  .md-opening-portrait { width: 83%; height: 57%; left: -9%; bottom: 2%; opacity: .88; }
+  .md-opening-disc { left: 0; top: 33%; width: 85vw; }
+  .md-opening-lockup { left: 18%; width: 78%; top: 26%; }
+  .md-opening-compass { margin-bottom: 14px; width: 15px; height: 15px; }
+  .md-opening-chapter { margin-bottom: 10px; font-size: 8px; }
+  .md-opening-game-title { font-size: 70px; }
+  .md-opening-roman-title { margin-top: 8px; font-size: 10px; }
+  .md-opening-rule { margin: 12px auto; width: 40px; }
+  .md-opening-subtitle { font-size: 12px; }
+  .md-opening-lockup.is-english .md-opening-game-title { font-size: 36px; }
+  .md-opening-controls { right: max(16px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); }
+  .md-opening-hint { display: none; }
+  .md-opening[data-art="fallback"] .md-opening-lockup { top: 45%; left: 10%; width: 80%; }
+}
+@media (max-height: 500px) and (min-width: 601px) {
+  .md-opening-compass, .md-opening-chapter { display: none; }
+  .md-opening-game-title { font-size: 66px; }
+  .md-opening-rule { margin: 13px auto; }
+  .md-opening-roman-title { margin-top: 8px; }
+  .md-opening-controls { bottom: 10px; }
+  .md-opening-caption { bottom: 15%; }
+}
+.md-opening.is-static *, .md-opening.is-static *::before, .md-opening.is-static *::after { animation: none !important; transition: none !important; }
+.md-opening.is-static .md-opening-title { opacity: 1; }
+.md-opening.is-static .md-opening-motes, .md-opening.is-static .md-opening-progress { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .md-opening *, .md-opening *::before, .md-opening *::after { animation: none !important; transition: none !important; }
+}

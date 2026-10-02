@@ -124,12 +124,12 @@
     MD.dungeonId=options.dungeonId||data.defaultDungeonId;
     if(!own(data.dungeons,MD.dungeonId)||reserved.has(MD.dungeonId))throw new Error('未知迷宫 '+MD.dungeonId);
   }
-  function seededRandom(seed){let state=seed>>>0;return()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};}
+  function seededRandom(seed){let state=seed>>>0;const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};random.getState=()=>state;random.setState=value=>{if(!Number.isInteger(value)||value<0||value>4294967295)throw new Error("Invalid random state");state=value>>>0;};return random;}
   function weightedPick(entries,random){const total=entries.reduce((s,e)=>s+e.weight,0),roll=random();let sum=0;for(const e of entries){sum+=e.weight;if(roll<Math.round(sum/total*1e12)/1e12)return e.id;}return entries[entries.length-1].id;}
   async function boot(){const{data}=await loadDefaults();const params=new URLSearchParams(global.location.search),preview=params.get('designer')==='1';const memory=new Map();const storage=preview?{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,String(v))}:{getItem:k=>global.localStorage.getItem(k),setItem:(k,v)=>global.localStorage.setItem(k,String(v))};let savedId=data.defaultDungeonId;if(!preview){try{const saved=JSON.parse(storage.getItem('md-expedition-v1')||'null');if(saved&&saved.version===1&&own(data.dungeons,saved.dungeonId)&&!reserved.has(saved.dungeonId))savedId=saved.dungeonId;}catch(_){}}
     const dungeonId=params.has('dungeon')?params.get('dungeon'):savedId;if(!own(data.dungeons,dungeonId)||reserved.has(dungeonId))throw new Error('未知迷宫 '+dungeonId);
     const seedText=params.get('seed')||'42',floorText=params.get('floor')||'1';if(preview&&(!/^\d+$/.test(seedText)||Number(seedText)>4294967295||!/^\d+$/.test(floorText)||Number(floorText)<1||Number(floorText)>data.dungeons[dungeonId].totalFloors))throw new Error('试玩 seed 必须是0–4294967295整数，floor 必须在所选迷宫楼层内');
-    const MD={storage};installRuntime(MD,data,{dungeonId,locale:params.get('lang')||data.localization.defaultLocale});MD.preview=preview?{seed:Number(seedText),floor:Number(floorText),dungeonId}:null;MD.random=preview?seededRandom(MD.preview.seed):Math.random;MD.weightedPick=e=>weightedPick(e,MD.random);global.MD=MD;
+    const MD={storage};installRuntime(MD,data,{dungeonId,locale:params.get('lang')||data.localization.defaultLocale});MD.preview=preview?{seed:Number(seedText),floor:Number(floorText),dungeonId}:null;MD.random=seededRandom(preview?MD.preview.seed:(global.crypto&&global.crypto.getRandomValues?global.crypto.getRandomValues(new Uint32Array(1))[0]:Date.now()>>>0));MD.weightedPick=e=>weightedPick(e,MD.random);global.MD=MD;
   }
   global.MDConfig={validate,parse,loadDefaults,createTranslator,installRuntime,seededRandom,weightedPick,boot,MAX_BYTES};
 })(typeof window!=='undefined'?window:globalThis);

@@ -6,7 +6,7 @@ import sys
 
 def validate_route(event, base, head, head_repository, repository):
     if event == "push":
-        return  # The workflow limits pushes to preview and main.
+        return  # The workflow limits pushes to design, preview and main; deployment remains main-only.
     if event != "pull_request":
         raise ValueError(f"Unsupported release event: {event}")
     expected = {"preview": "design", "main": "preview"}.get(base)

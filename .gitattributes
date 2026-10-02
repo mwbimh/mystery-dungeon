@@ -86,3 +86,6 @@ tests/fixtures/player-hp47-rules.xlsx -filter -diff -merge -text
 
 *.uasset filter=lfs diff=lfs merge=lfs -text
 *.umap filter=lfs diff=lfs merge=lfs -text
+
+# OP artwork is a single 3 MiB distribution asset, published as an ordinary Git blob.
+assets/runtime/opening/whale-maid.png -filter -diff -merge -text

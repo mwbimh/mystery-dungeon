@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [preview, main]
   push:
-    branches: [preview, main]
+    branches: [design, preview, main]
 
 # PRs and preview builds never receive deployment permissions.
 permissions:
@@ -62,8 +62,8 @@ jobs:
       - name: Build static runtime from this commit's workbooks
         run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: Test browser gameplay and independent static build
-        run: npm run test:browser
+      - name: Test browser gameplay twice and independent static build
+        run: npm run test:browser:stable
       - name: Upload browser verification screenshots
         if: always()
         uses: actions/upload-artifact@v4

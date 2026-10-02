@@ -4,6 +4,10 @@
   const MAX_BAG = MD.config.rules.maxBag;
   const DEBUG = /(?:\?|&)debug=1(?:&|$)/.test(location.search);
   const ASSET_V = "59";
+  let paused = !!MD.shellManaged;
+  let playTimeMs = 0;
+  let playStarted = performance.now();
+  function changed() { if (MD.session && MD.session.onChange) MD.session.onChange(); }
   const ITEM_ICON_ALIASES = { sleepHerb: "herb", knockStaff: "staff" };
 
   function floorRules() {
@@ -32,7 +36,7 @@
   let ctx = null;
   let overlayCtx = null;
   let use3d = false;
-  const FORCE_FLAT = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
+  const FORCE_FLAT = /(?:\?|&)flat=1(?:&|$)/.test(location.search) || !!(MD.settings && MD.settings.renderer === "flat");
 
   function enable2d() {
     use3d = false;
@@ -214,7 +218,7 @@
     const spec = MD.sprites && MD.sprites.playerAnim;
     const fps = (spec && spec.fps) || 10;
     const frames = (spec && spec.frames) || 4;
-    return frames * (1000 / fps);
+    return MD.settings && MD.settings.reducedMotion ? 0 : frames * (1000 / fps);
   }
 
   function playPlayerAnimThen(anim, cb) {
@@ -232,6 +236,7 @@
       state.animLock = false;
       if (p.anim === anim && anim !== "fail") p.anim = "idle";
       if (cb) cb();
+      changed();
     }, playerAnimMs());
   }
 
@@ -400,7 +405,7 @@
   }
 
   function enterDungeon() {
-    if (state.mode !== "town") return;
+    if (paused || state.mode !== "town") return;
     resetRunInput();
     state.floorConfig = null;
     state.turn = 0;
@@ -658,6 +663,7 @@
 
   /** Attempt player move by dx,dy. Returns 'moved'|'attacked'|'blocked'|'none' */
   function tryPlayerMove(dx, dy, fromDash) {
+    if (paused) return "none";
     const p = state.player;
     if (!p || !p.alive) return "none";
     if (state.animLock) return "none";
@@ -736,6 +742,7 @@
   }
 
   function waitTurn() {
+    if (paused) return;
     if (state.animLock) return;
     const p = state.player;
     if (p && p.alive) {
@@ -1332,6 +1339,7 @@
   }
 
   function renderSkills() {
+    changed();
     sanitizeSkills();
     const aRow = document.getElementById("skillActiveRow");
     if (aRow && aRow.children.length !== skillMeta.active) mountSkillSlots();
@@ -1462,6 +1470,7 @@
   }
 
   function renderInv() {
+    changed();
     const grid = document.getElementById("invGrid");
     const actions = document.getElementById("invActions");
     grid.innerHTML = "";
@@ -1546,6 +1555,7 @@
   }
 
   function renderWarehouse() {
+    changed();
     const storeEl = document.getElementById("whStore");
     if (!storeEl) return;
     storeEl.innerHTML = "";
@@ -1607,6 +1617,7 @@
   let chordParts = { x: 0, y: 0 };
 
   function handleDirection(sx, sy, shift) {
+    if (paused) return;
     const [dx, dy] = toWorldDir(sx, sy);
     if (dx === 0 && dy === 0) return;
     if (state.skillAiming) return;
@@ -1629,6 +1640,7 @@
   }
 
   function onKeyDown(e) {
+    if (paused) return;
     // Native selector/navigation keys must not move the character or enter a run.
     if (e.target && /^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
     const key = e.key;
@@ -1914,6 +1926,7 @@
   window.addEventListener("keyup", onKeyUp);
 
   function updateUI() {
+    changed();
     MD.updateSidePanel(state);
     const dungeon = state.floorConfig ? state.floorConfig.dungeon : selectedDungeon();
     const name = MD.t(dungeon.nameKey);
@@ -1954,6 +1967,7 @@
   }
 
   function frame() {
+    if (paused) { requestAnimationFrame(frame); return; }
     const wrap = canvas.parentElement;
     const cw = Math.max(320, wrap.clientWidth);
     const ch = Math.max(280, wrap.clientHeight);
@@ -1995,7 +2009,7 @@
   log("欢迎。", "good");
   showOverlay("townOverlay");
   updateUI();
-  canvas.focus();
+  if (!MD.shellManaged) canvas.focus();
   requestAnimationFrame(frame);
 
   if (MD.preview) {
@@ -2003,6 +2017,87 @@
     if (MD.preview.floor !== 1) setupFloor(MD.preview.floor);
     updateUI();
   }
+
+  // Save only stable, serializable gameplay state. Transient input/animation and
+  // renderer objects are deliberately reconstructed rather than persisted.
+  function snapshot() {
+    if (state.animLock) throw new Error("请等待当前动作结束再保存");
+    const out = {};
+    for (const key of ["mode", "dungeonId", "floor", "turn", "map", "player", "enemies", "items", "bag", "skills", "warehouse", "log", "lastBellyWarn", "spawnCounter", "endKind"]) out[key] = state[key];
+    out.skillMeta = { active: skillMeta.active, passive: skillMeta.passive };
+    out.explored = Array.from(state.explored);
+    out.triggeredMH = Array.from(state.triggeredMH);
+    out.rngState = MD.random.getState ? MD.random.getState() : 42;
+    out.playTimeMs = Math.floor(playTimeMs + (paused ? 0 : performance.now() - playStarted));
+    const copy = JSON.parse(JSON.stringify(out));
+    for (const actor of [copy.player, ...copy.enemies]) if (actor) delete actor._vid;
+    if (copy.player) { copy.player.anim = copy.endKind === "death" ? "fail" : "idle"; copy.player.animT0 = 0; }
+    return copy;
+  }
+  function resume() {
+    paused = false;
+    playStarted = performance.now();
+    canvas.focus();
+  }
+  async function pause() {
+    if (!paused) { playTimeMs += performance.now() - playStarted; paused = true; }
+    state.dashActive = false;
+    state.pendingDash = null;
+    state.keysDown.clear();
+    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+    // Let an already committed attack/stair/death finish before taking a snapshot.
+    while (state.animLock) await new Promise(resolve => setTimeout(resolve, 20));
+    cancelSkillAim();
+    state.aiming = null;
+  }
+  function restore(saved) {
+    if (window.MDSaves) {
+      const errors = MDSaves.validateSnapshot(saved, MD.config);
+      if (errors.length) throw new Error(errors.join("\n"));
+    }
+    const copy = JSON.parse(JSON.stringify(saved));
+    resetRunInput();
+    // Direct assignment is safe only after validation and is necessary when the
+    // previous slot was inside a different dungeon (selectDungeon forbids that).
+    MD.dungeonId = copy.dungeonId;
+    for (const key of ["mode", "dungeonId", "floor", "turn", "map", "player", "enemies", "items", "bag", "skills", "warehouse", "log", "lastBellyWarn", "spawnCounter", "endKind"]) state[key] = copy[key];
+    skillMeta.active = copy.skillMeta.active; skillMeta.passive = copy.skillMeta.passive;
+    state.explored = new Set(copy.explored); state.triggeredMH = new Set(copy.triggeredMH);
+    state.visible = new Set(); state.justEnteredMH = false;
+    state.floorConfig = state.mode === "dungeon" ? MD.floorConfig(state.floor) : null;
+    state.theme = state.mode === "dungeon" ? MD.themeForFloor(state.floor) : null;
+    if (state.theme && MD.view3d && MD.view3d.setTheme) MD.view3d.setTheme(state.theme);
+    if (state.player) { state.player.animT0 = performance.now(); refreshFOV(); }
+    if (MD.random.setState) MD.random.setState(copy.rngState);
+    playTimeMs = copy.playTimeMs; playStarted = performance.now();
+    state.invOpen = false; state.whOpen = false;
+    document.getElementById("hudInv").classList.add("collapsed");
+    document.getElementById("hudWh").classList.add("collapsed");
+    hideOverlay("helpOverlay"); hideOverlay("endOverlay");
+    if (state.mode === "town") showOverlay("townOverlay"); else hideOverlay("townOverlay");
+    if (state.endKind) {
+      document.getElementById("endTitle").textContent = state.endKind === "clear" ? "走出了迷宫" : "倒下了";
+      document.getElementById("endMsg").textContent = state.endKind === "clear" ? "你带着背包里的物品回到了镇子。" : "背包里的物品都丢掉了。仓库仍然保留。";
+      showOverlay("endOverlay");
+    }
+    mountSkillSlots(); renderSkills(); renderInv(); renderWarehouse(); updateUI();
+    if (DEBUG) mountDebugPanel();
+  }
+  function fresh(legacy) {
+    resetRunInput();
+    skillMeta.active = SKILL_SLOT_START.active; skillMeta.passive = SKILL_SLOT_START.passive;
+    if (legacy && legacy.skillMeta) { skillMeta.active = legacy.skillMeta.active; skillMeta.passive = legacy.skillMeta.passive; }
+    MD.dungeonId = legacy && legacy.dungeonId || MD.config.defaultDungeonId || MD.dungeonId;
+    state.dungeonId = MD.dungeonId;
+    state.bag = emptyBag(); state.skills = emptySkills(); state.warehouse = legacy && legacy.warehouse || [];
+    state.log = []; state.lastBellyWarn = MD.config.player.belly;
+    playTimeMs = 0; playStarted = performance.now();
+    if (MD.random.setState) MD.random.setState(Math.floor(Math.random() * 4294967296));
+    returnToTown("新的旅程，从这里开始。");
+    mountSkillSlots(); renderSkills(); renderInv(); renderWarehouse();
+    return snapshot();
+  }
+  MD.session = { snapshot, restore, fresh, pause, resume, isPaused: () => paused, isStable: () => !state.animLock, onChange: null };
 
   // Expose for debug
   window.MD_STATE = state;

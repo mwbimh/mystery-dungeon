@@ -4,9 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>迷宫</title>
-  <link rel="stylesheet" href="css/style.css?v=67" />
+  <link rel="stylesheet" href="css/style.css?v=68" />
+  <link rel="stylesheet" href="css/menu.css?v=68" />
+  <link rel="stylesheet" href="css/opening.css?v=68" />
 </head>
-<body>
+<body class="shell-open">
+  <section id="loadingScreen" class="loading-screen" aria-live="polite" aria-label="游戏加载">
+    <div class="loading-card"><span class="loading-mark" aria-hidden="true">◇</span><p class="menu-eyebrow">MYSTERY DUNGEON</p><h1 id="loadingTitle">展开地图</h1><p id="loadingDetail">准备你的旅程</p><progress id="loadingProgress" max="1" value="0"></progress><button id="loadingRetry" type="button" hidden>重新加载</button></div>
+  </section>
+  <section id="menuScreen" class="menu-screen" aria-label="开始菜单" hidden>
+    <div class="menu-art" aria-hidden="true"><div class="menu-orbit"></div><img class="menu-character" src="assets/runtime/ui/town/deepseek-idle.png" alt=""><span class="menu-art-caption">灯火未眠，旅途未完</span></div>
+    <div class="menu-panel"><div id="menuContent"></div><p id="menuNotice" class="menu-notice" role="status" aria-live="polite"></p></div>
+  </section>
+  <input id="saveFileInput" type="file" accept="application/json,.json" hidden>
+  <div class="session-controls"><span id="saveStatus" role="status" aria-live="polite"></span><button id="btnSessionMenu" type="button" hidden>菜单 / 存档</button></div>
   <div class="app">
     <div class="board-wrap">
       <canvas id="game" width="960" height="640" tabindex="0" aria-label="迷宫游戏区域"></canvas>
@@ -182,46 +193,6 @@
   </div>
 
   <script src="js/config.js"></script>
-  <script>
-  (function () {
-    var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
-    var v = "67";
-    var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
-    if (!flat) {
-      files.unshift("vendor/three.min.js");
-      files.push("js/sprites.js?v=" + v, "js/view3d.js?v=" + v);
-    }
-    files.push("js/ui.js?v=" + v, "js/game.js?v=" + v);
-    function load(i) {
-      if (i >= files.length) return;
-      var s = document.createElement("script");
-      s.src = files[i];
-      s.onload = function () { load(i + 1); };
-      s.onerror = function () {
-        console.error("failed", files[i]);
-        if (files[i].indexOf("three") >= 0 || files[i].indexOf("view3d") >= 0 || files[i].indexOf("sprites") >= 0) {
-          load(i + 1);
-        }
-      };
-      document.body.appendChild(s);
-    }
-    MDConfig.boot().then(function () {
-      if (MD.preview) {
-        var banner = document.createElement("div");
-        banner.textContent = MD.t("preview.banner", MD.preview);
-        banner.style.cssText = "position:fixed;top:0;left:0;z-index:9999;background:#153a30;color:white;padding:4px 12px;font:14px sans-serif;pointer-events:none";
-        document.body.appendChild(banner);
-      }
-      load(0);
-    }).catch(function (error) {
-      var panel = document.createElement("pre");
-      panel.id = "configError";
-      panel.style.cssText = "position:fixed;inset:20px;z-index:99999;background:#251d24;color:white;padding:24px;white-space:pre-wrap";
-      panel.textContent = "配置加载失败，游戏未启动。请先运行 python3 tools/convert_config.py，并使用 HTTP 服务打开游戏。\n" + error.message;
-      document.body.appendChild(panel);
-      console.error(error);
-    });
-  })();
-  </script>
+  <script src="js/bootstrap.js?v=68"></script>
 </body>
 </html>

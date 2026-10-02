@@ -31,8 +31,10 @@ def main():
     try:
         staging.mkdir()
         shutil.copy2(ROOT / "index.html", staging / "index.html")
+        shutil.copy2(ROOT / "LICENSE", staging / "LICENSE")
         for directory in ("js", "css", "assets/runtime", "vendor"):
             shutil.copytree(ROOT / directory, staging / directory)
+        shutil.copy2(ROOT / "assets/ATTRIBUTION.txt", staging / "assets/ATTRIBUTION.txt")
         (staging / "config").mkdir()
         for filename in ("game.json", "schema.json"):
             shutil.copy2(ROOT / "config" / filename, staging / "config" / filename)

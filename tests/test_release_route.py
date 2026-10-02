@@ -32,6 +32,16 @@ class ReleaseRouteTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     route.validate_route("pull_request", base, head, head_repo, "owner/repo")
 
+    def test_design_push_runs_full_checks_before_any_pr(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/config.yml").read_text()
+        self.assertIn("push:\n    branches: [design, preview, main]", workflow)
+        self.assertIn("run: npm run test:browser:stable", workflow)
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", workflow)
+        import json
+        package = json.loads((root / "package.json").read_text())
+        self.assertEqual(package["scripts"]["test:browser:stable"], "npm run test:browser && npm run test:browser")
+
     def test_unknown_event(self):
         with self.assertRaises(ValueError):
             route.validate_route("workflow_dispatch", "", "", "", "owner/repo")
