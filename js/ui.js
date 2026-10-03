@@ -175,16 +175,19 @@
     const width = Math.ceil(map.width * scale + border);
     const height = Math.ceil(map.height * scale + border);
     const x = W - width - margin;
-    let y = margin;
     const bounds = obstacles.filter(rect => rect && rect.width > 0 && rect.height > 0);
-    // Moving below one header may meet another, taller header in a narrow view.
-    for (let pass = 0; pass <= bounds.length; pass++) {
-      const collisions = bounds.filter(rect => x < rect.x + rect.width + gap && x + width + gap > rect.x
-        && y < rect.y + rect.height + gap && y + height + gap > rect.y);
-      if (!collisions.length) break;
-      y = Math.max(...collisions.map(rect => rect.y + rect.height + gap));
+    // Prefer the right rail below its controls. On a short viewport a tall log
+    // may fill that rail, so also consider the open edges of every HUD panel.
+    const xs = [...new Set([x, margin, ...bounds.flatMap(rect => [rect.x - width - gap, rect.x + rect.width + gap])])]
+      .filter(value => value >= margin && value + width <= W - margin).sort((a, b) => b - a);
+    const ys = [...new Set([margin, ...bounds.flatMap(rect => [rect.y + rect.height + gap, rect.y - height - gap])])]
+      .filter(value => value >= margin && value + height <= H - margin).sort((a, b) => a - b);
+    for (const px of xs) for (const py of ys) {
+      const blocked = bounds.some(rect => px < rect.x + rect.width + gap && px + width + gap > rect.x
+        && py < rect.y + rect.height + gap && py + height + gap > rect.y);
+      if (!blocked) return Object.freeze({ x: px, y: py, width, height, scale });
     }
-    return Object.freeze({ x, y, width, height, scale });
+    return Object.freeze({ x, y: margin, width, height, scale });
   }
 
   function drawMinimap(ctx, state, W, H) {
@@ -197,7 +200,7 @@
     if (independent) {
       W = (document.documentElement && document.documentElement.clientWidth) || global.innerWidth || W;
       H = (document.documentElement && document.documentElement.clientHeight) || global.innerHeight || H;
-      obstacles = Array.from(document.querySelectorAll(".session-controls,.hud-vitals,#btnInv,#previewBanner")).filter(node => {
+      obstacles = Array.from(document.querySelectorAll(".session-controls,.hud-vitals,#btnInv,#previewBanner,#hudLog,#hudSkills")).filter(node => {
         const style = global.getComputedStyle(node);
         return !node.hidden && style.display !== "none" && style.visibility !== "hidden";
       }).map(node => node.getBoundingClientRect());

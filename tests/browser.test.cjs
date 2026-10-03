@@ -116,28 +116,55 @@ async function assertInsideViewport(page, selector, label) {
   assert.ok(box.x >= -1 && box.y >= -1 && box.x + box.width <= size.width + 1 && box.y + box.height <= size.height + 1,
     label + ' fits viewport: ' + JSON.stringify(box));
 }
-async function assertNormalHudSafe(page, label) {
-  const selectors = { minimap:'#hudMinimap', session:'.session-controls', vitals:'.hud-vitals', bag:'#btnInv' };
-  const boxes = {};
-  for (const [name, selector] of Object.entries(selectors)) {
-    await assertInsideViewport(page, selector, label + ' ' + name);
-    boxes[name] = await page.locator(selector).boundingBox();
+async function assertNormalHudSafe(page, label, checkpoint) {
+  // One browser round trip observes a single completed frame atomically. The
+  // rectangles, visibility, scrolling, and save data all belong to that frame.
+  const actual = await page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const rect = node => {
+      if (!node) return null;
+      const r = node.getBoundingClientRect(), style = getComputedStyle(node);
+      return { x:r.x, y:r.y, width:r.width, height:r.height,
+        visible:r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' };
+    };
+    const selectors = { minimap:'#hudMinimap', session:'.session-controls', vitals:'.hud-vitals', bag:'#btnInv',
+      log:'#hudLog', skills:'#hudSkills' };
+    const boxes = Object.fromEntries(Object.entries(selectors).map(([name, selector]) => [name,rect(document.querySelector(selector))]));
+    const canvas = document.getElementById('minimapCanvas'), status = document.getElementById('saveStatus');
+    return { boxes, width:innerWidth, height:innerHeight, x:scrollX, y:scrollY,
+      rootWidth:document.documentElement.scrollWidth, rootHeight:document.documentElement.scrollHeight,
+      bodyWidth:document.body.scrollWidth, bodyHeight:document.body.scrollHeight,
+      rootOverflow:getComputedStyle(document.documentElement).overflow, bodyOverflow:getComputedStyle(document.body).overflow,
+      canvasReady:!!canvas && canvas.width > 0 && canvas.height > 0,
+      saving:status?.textContent || '', saveVisible:!!rect(status)?.visible,
+      menuVisible:!!rect(document.getElementById('btnSessionMenu'))?.visible, preview:!!MD.preview,
+      snapshot:{ ...MD.session.snapshot(), playTimeMs:0 } };
+  });
+  const { boxes } = actual;
+  for (const [name, box] of Object.entries(boxes)) {
+    assert.ok(box?.visible && box.width > 0 && box.height > 0, label + ' ' + name + ' visible dimensions');
+    assert.ok(box.x >= -1 && box.y >= -1 && box.x + box.width <= actual.width + 1 && box.y + box.height <= actual.height + 1,
+      label + ' ' + name + ' fits viewport: ' + JSON.stringify(box));
   }
-  for (const [a, b] of [['minimap','session'], ['minimap','vitals'], ['minimap','bag'], ['session','vitals'], ['session','bag']]) {
+  for (const [a, b] of [['minimap','session'], ['minimap','vitals'], ['minimap','bag'], ['minimap','log'], ['minimap','skills'],
+    ['session','vitals'], ['session','bag']]) {
     const first = boxes[a], second = boxes[b];
     const width = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
     const height = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
     assert.ok(width <= 1 || height <= 1, `${label} ${a}/${b} overlap ${width}×${height}: ${JSON.stringify(boxes)}`);
   }
-  assert.equal(await page.locator('#minimapCanvas').evaluate(canvas => canvas.width > 0 && canvas.height > 0), true,
-    label + ' uses the shared real minimap canvas');
-  const saving = await page.locator('#saveStatus').textContent();
-  assert.ok(saving.trim().length > 0, label + ' includes the real normal-mode save status');
-  if (page.viewportSize().width > 700) assert.equal(await page.locator('#saveStatus').isVisible(), true,
-    label + ' desktop save status remains visible');
-  assert.equal(await page.locator('#btnSessionMenu').isVisible(), true, label + ' normal journey control remains visible');
-  assert.equal(await page.evaluate(() => !!MD.preview), false, label + ' is not a designer preview');
-  await assertFixedStage(page, label);
+  assert.equal(actual.canvasReady, true, label + ' uses the shared real minimap canvas');
+  assert.ok(actual.saving.trim().length > 0, label + ' includes the real normal-mode save status');
+  if (actual.width > 700) assert.equal(actual.saveVisible, true, label + ' desktop save status remains visible');
+  assert.equal(actual.menuVisible, true, label + ' normal journey control remains visible');
+  assert.equal(actual.preview, false, label + ' is not a designer preview');
+  assert.equal(actual.x, 0, label + ' page scrollX');
+  assert.equal(actual.y, 0, label + ' page scrollY');
+  for (const key of ['rootWidth','bodyWidth']) assert.ok(actual[key] <= actual.width + 1, label + ' ' + key);
+  for (const key of ['rootHeight','bodyHeight']) assert.ok(actual[key] <= actual.height + 1, label + ' ' + key);
+  assert.equal(actual.rootOverflow, 'hidden', label + ' root owns no scrollbar');
+  assert.equal(actual.bodyOverflow, 'hidden', label + ' body owns no scrollbar');
+  assert.deepEqual(actual.snapshot, checkpoint, label + ' resize never changes the live journey');
 }
 
 async function savedSnapshot(page) {
@@ -899,8 +926,15 @@ async function pressWorldStep(page, worldKey) {
   return after;
 }
 
-test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-relative pickup', { timeout:90000 }, async () => {
+test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-relative pickup', { timeout:90000 }, async t => {
+  const started = Date.now();
+  const checkpointLog = step => console.log('normal WebGL checkpoint ' + JSON.stringify({ step,elapsedMs:Date.now() - started }));
   const context = await browser.newContext({ viewport:{ width:1440, height:960 }, reducedMotion:'reduce' });
+  const abortContext = () => {
+    checkpointLog('deadline abort closes this context');
+    void context.close().catch(() => {});
+  };
+  t.signal.addEventListener('abort', abortContext, { once:true });
   // Control exactly fresh()'s one seed draw. Three's UUID/material/texture
   // allocation must keep native randomness before and after that call.
   await context.addInitScript(() => {
@@ -939,6 +973,7 @@ test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-
     assert.ok(start.bag.every(item => item === null));
     fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive:true });
     await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-departure.png'), fullPage:true });
+    checkpointLog('departure screenshot saved');
 
     let current = start, encounter = await observe();
     for (let steps = 0; steps < current.map.width * current.map.height; steps++) {
@@ -957,6 +992,7 @@ test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-
     await page.waitForFunction(() => MD_STATE.enemies.filter(enemy => enemy.alive && MD_STATE.visible.has(MD.key(enemy.x, enemy.y))).every(enemy => !!enemy._vid));
     await assertFixedStage(page, 'normal WebGL encounter');
     await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-natural-encounter.png'), fullPage:true });
+    checkpointLog('natural encounter screenshot saved');
 
     // Turn the camera through its public key control, then recompute the input
     // mapping before continuing the same live journey toward the visible loot.
@@ -973,24 +1009,64 @@ test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-
     await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-after-pickup.png'), fullPage:true });
     await page.locator('#btnInv').click();
     await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-loot-in-bag.png'), fullPage:true });
+    checkpointLog('pickup and bag screenshots saved');
     await page.locator('#btnInvClose').click();
+    await pressTurn(page, 'Space');
+    assert.deepEqual(errors, []);
+    checkpointLog('natural journey passed');
+  } finally {
+    checkpointLog('context close start');
+    await context.close();
+    t.signal.removeEventListener('abort', abortContext);
+    checkpointLog('context closed');
+  }
+});
+
+test('normal WebGL HUD stays separated across six viewports with real save controls', { timeout:90000 }, async t => {
+  const started = Date.now();
+  const checkpointLog = step => console.log('normal HUD checkpoint ' + JSON.stringify({ step,elapsedMs:Date.now() - started }));
+  const context = await browser.newContext({ viewport:{ width:1440, height:900 }, reducedMotion:'reduce' });
+  const abortContext = () => {
+    checkpointLog('deadline abort closes this context');
+    void context.close().catch(() => {});
+  };
+  t.signal.addEventListener('abort', abortContext, { once:true });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    // A separate ordinary new game keeps the original natural-encounter test's
+    // 90-second budget intact. No designer URL, save import or state injection.
+    await loaded(page, '');
+    await depart(page);
+    await page.waitForFunction(() => MD.view3d?.active && !!MD_STATE.player?._vid);
+    assert.equal(await page.evaluate(() => {
+      const gl = document.getElementById('game').getContext('webgl2');
+      return !!gl && !gl.isContextLost();
+    }), true);
     await pressTurn(page, 'Space');
     await page.waitForFunction(() => document.getElementById('saveStatus').textContent.includes('已自动保存'));
     const checkpoint = await savedSnapshot(page);
+    fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive:true });
+    checkpointLog('normal journey saved; starting six HUD viewports');
     for (const [name, width, height] of [['wide',1440,900], ['laptop',1280,720], ['phone',390,844],
       ['small',320,640], ['landscape',844,390], ['short-phone',390,780]]) {
+      checkpointLog(name + ' resize start');
       await page.setViewportSize({ width,height });
-      // Observe the first completed redraw after a native viewport resize.
-      // No UI mutation, camera reset, focus repair or substitute preview is used.
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-      await assertNormalHudSafe(page, 'normal WebGL ' + name);
-      assert.deepEqual(await savedSnapshot(page), checkpoint, name + ' resize never changes the live journey');
+      await assertNormalHudSafe(page, 'normal WebGL ' + name, checkpoint);
+      checkpointLog(name + ' geometry and unchanged state passed');
       if (['wide','phone','small','landscape'].includes(name)) {
         await page.screenshot({ path:path.join(ROOT, 'test-results/normal-hud-safe-' + name + '.png'), fullPage:true });
+        checkpointLog(name + ' screenshot saved');
       }
     }
     assert.deepEqual(errors, []);
-  } finally { await context.close(); }
+    checkpointLog('all six HUD viewports passed');
+  } finally {
+    checkpointLog('context close start');
+    await context.close();
+    t.signal.removeEventListener('abort', abortContext);
+    checkpointLog('context closed');
+  }
 });
 
 test('continuous new-player journey keeps actual keys working through town, modals, loot, reload and natural return', { timeout: 120000 }, async () => {

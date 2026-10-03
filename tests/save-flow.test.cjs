@@ -55,7 +55,7 @@ test('shared minimap layout is finite, immutable and inside six unobstructed vie
   }
 });
 
-test('minimap avoids normal save controls, vitals, bag and preview header without depending on obstacle order', async () => {
+test('minimap avoids normal save controls, vitals, bag, log, skills and preview header regardless of obstacle order', async () => {
   const h = await game();
   for (const [width, height] of [[1440,900], [1280,720], [390,844], [320,640], [844,390], [390,780]]) {
     const compact = width <= 700;
@@ -63,6 +63,8 @@ test('minimap avoids normal save controls, vitals, bag and preview header withou
       { x:width - (compact ? 74 : 262), y:12, width:compact ? 64 : 244, height:compact ? 36 : 43 },
       { x:compact ? 3 : 12, y:compact ? 5 : 10, width:compact ? 230 : 325, height:94 },
       { x:10, y:104, width:compact ? 54 : 67, height:67 },
+      { x:width - (compact ? 208 : 298), y:height - (compact ? 220 : 308), width:compact ? 200 : 282, height:compact ? 130 : 180 },
+      { x:(width - (compact ? 194 : 330)) / 2, y:height - (compact ? 74 : 106), width:compact ? 194 : 330, height:compact ? 67 : 94 },
     ];
     for (const obstacles of [controls, [...controls, { x:0, y:0, width, height:22 }]]) {
       const before = plain(obstacles), map = { width:52, height:34 };
@@ -91,6 +93,23 @@ test('minimap resolves stacked collisions repeatedly and ignores zero-area hidde
   const layout = h.MD.layoutMinimap(map, 390, 780, blockers);
   assert.equal(layout.y, 178, 'the map clears both stacked right-hand controls');
   assert.deepEqual(plain(h.MD.layoutMinimap(map, 390, 780, [blockers[1], blockers[0]])), plain(layout));
+});
+
+test('large minimap uses another open HUD edge when the right rail has no safe vertical space', async () => {
+  const h = await game(), map = { width:61, height:61 };
+  const obstacles = [
+    { x:582, y:12, width:244, height:43 },
+    { x:12, y:10, width:325, height:94 },
+    { x:546, y:172, width:282, height:180 },
+    { x:310, y:401, width:230, height:73 },
+  ];
+  const layout = h.MD.layoutMinimap(map, 844, 480, obstacles);
+  assert.ok(layout.x < 844 - layout.width - 12, 'do not push the map offscreen below the log');
+  assert.ok(layout.x >= 12 && layout.y >= 12 && layout.x + layout.width <= 832 && layout.y + layout.height <= 468);
+  for (const rect of obstacles) {
+    assert.ok(layout.x >= rect.x + rect.width + 10 || layout.x + layout.width + 10 <= rect.x
+      || layout.y >= rect.y + rect.height + 10 || layout.y + layout.height + 10 <= rect.y);
+  }
 });
 
 test('closing dungeon bag and help restores playable focus for the very next key', async () => {
