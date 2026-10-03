@@ -19,7 +19,7 @@
   const PITCH_FIXED = 52 * DEG; // locked overhead; orbit yaw only
   const DIST_MIN = 4;
   const DIST_MAX = 16;
-  const UV_SCALE = 0.48;
+  const UV_SCALE = 0.38;
   const YAW_STEP = 15 * DEG;
 
   const COL = {
@@ -86,7 +86,7 @@
   const orbit = {
     yaw: 0.68,
     pitch: PITCH_FIXED,
-    dist: 9.4,
+    dist: 7.8,
   };
   let dragging = false;
   let lastPtrX = 0;
@@ -281,7 +281,7 @@
     if (scene.background && scene.background.set) scene.background.set(theme.fog);
     if (renderer) renderer.setClearColor(theme.fog, 1);
     if (groundMesh) {
-      groundMesh.material.color.set(theme.fog).multiplyScalar(0.42);
+      groundMesh.material.color.set(theme.fog);
     }
     if (hemi) {
       hemi.color.set(theme.hemiSky);
@@ -301,19 +301,178 @@
       COL.wallMem.set(theme.tints.wallMem);
     }
     lastVisSig = "";
-    // Quiet stone/earth/metal grain, with volume doing the work of separation.
-    // No baked tile outlines, wall tracing or high-contrast cobblestone network.
-    const env = environment();
-    const palette = color => [(color >> 16) & 255, (color >> 8) & 255, color & 255];
-    if (!terrainTextures[theme.id]) {
-      terrainTextures[theme.id] = [
-        makeSeamlessTex(128, 3, palette(env.ground)),
-        makeSeamlessTex(128, 19, palette(env.stone)),
-        makeSeamlessTex(128, 77, palette(new THREE.Color(env.ground).lerp(new THREE.Color(env.accent), 0.16).getHex())),
-        makeSeamlessTex(128, 91, palette(env.secondary)),
-      ];
-    }
+    // Each material has a designed visual vocabulary, not merely a recolored noise.
+    if (!terrainTextures[theme.id]) terrainTextures[theme.id] = [
+      paintedTerrain(theme, false, false), paintedTerrain(theme, true, false),
+      paintedTerrain(theme, false, true), paintedTerrain(theme, true, true),
+    ];
     [dirtTex, rockTex, dirtTexB, rockTexB] = terrainTextures[theme.id];
+  }
+
+  // Painted materials are authored at three scales: broad color masses, readable
+  // construction/organic shapes, then small brush marks. Their world-space UVs
+  // continue across cells, so the gameplay grid never becomes the artwork.
+  function materialTexture(canvas) {
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  function paintedTerrain(theme, wall, alternate) {
+    const size = 512, env = theme.environment;
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
+    const g = canvas.getContext("2d"), seed = 71 + (alternate ? 137 : 0) + (wall ? 311 : 0);
+    const rgb = hex => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
+    const base = rgb(wall ? env.stone : env.ground);
+    const image = g.createImageData(size, size);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      const broad = Math.sin(u * Math.PI * 4 + Math.sin(v * Math.PI * 2) * 1.8) * Math.cos(v * Math.PI * 4 + 0.7);
+      const grain = (hash01(x + seed, y + seed) - 0.5) * 9;
+      const shade = broad * (theme.id === "forest" ? 13 : 7) + grain;
+      const i = (y * size + x) * 4;
+      image.data[i] = clamp(base[0] + shade, 0, 255);
+      image.data[i + 1] = clamp(base[1] + shade * 0.8, 0, 255);
+      image.data[i + 2] = clamp(base[2] + shade * 0.55, 0, 255);
+      image.data[i + 3] = 255;
+    }
+    g.putImageData(image, 0, 0);
+    const R = (i, j) => hash01(i * 13 + seed, j * 17 + seed);
+    const ellipse = (x,y,rx,ry,angle,color) => { g.fillStyle=color; g.beginPath(); g.ellipse(x,y,rx,ry,angle,0,Math.PI*2); g.fill(); };
+    const line = (points,color,width) => { g.strokeStyle=color; g.lineWidth=width; g.lineCap="round"; g.beginPath(); points.forEach((p,i)=>i?g.lineTo(...p):g.moveTo(...p)); g.stroke(); };
+    if (theme.id === "forest") {
+      // Deliberately clustered meadow, not a uniform confetti/noise fill.
+      for (let i=0;i<46;i++) {
+        const x=R(i,1)*size,y=R(i,2)*size,r=16+R(i,3)*56;
+        ellipse(x,y,r,r*0.53,R(i,4)*3,wall?"rgba(101,72,34,.13)":i%3?"rgba(81,139,46,.14)":"rgba(246,221,151,.35)");
+      }
+      for (let i=0;i<760;i++) {
+        const x=R(i,5)*size,y=R(i,6)*size,patch=noise2(x/65+seed,y/65);
+        if (patch<0.42) continue;
+        const length=3+R(i,7)*8;
+        line([[x-3,y+2],[x,y-length],[x+1,y+1],[x+5,y-length*0.65]],i%3?"rgba(75,122,39,.50)":"rgba(232,240,151,.75)",1.6);
+        if (i%13===0) {
+          ellipse(x,y,3.2,1.8,-0.6,"#e7c372"); ellipse(x+2,y-4,2,3,0.3,"#7d9f46");
+        }
+        if (!wall && i%29===0) {
+          for(let k=0;k<5;k++) ellipse(x+Math.cos(k*1.256)*3,y+Math.sin(k*1.256)*3,2.3,1.4,k*1.256,i%2?"#fff0b1":"#e8b9cc");
+          ellipse(x,y,1.7,1.7,0,"#d29840");
+        }
+      }
+    } else if (theme.id === "wooden") {
+      // Staggered tongue-and-groove boards with knots, endgrain and warm wear.
+      const rows=wall?5:8, height=size/rows;
+      for(let row=0;row<rows;row++) {
+        const y=row*height;
+        g.fillStyle=row%3===0?"rgba(115,62,28,.10)":"rgba(255,218,151,.13)"; g.fillRect(0,y,size,height-2);
+        line([[0,y+height-1],[size,y+height-1]],"rgba(111,66,34,.49)",2.2);
+        line([[0,y+3],[size,y+3]],"rgba(255,226,165,.52)",1.5);
+        const joint=(row%2?0.3:0.76)*size;
+        line([[joint,y+3],[joint,y+height-3]],"rgba(104,62,30,.48)",2);
+        for(let k=0;k<10;k++) {
+          const gy=y+6+R(row,k)*Math.max(6,height-12),start=R(k,row)*size;
+          line([[start,gy],[start+24,gy-2],[start+57,gy+1],[start+104,gy]],"rgba(125,75,36,.17)",1.2);
+        }
+        const knotX=R(row,50)*size;
+        ellipse(knotX,y+height*0.48,9,3,0,"rgba(103,57,28,.30)");
+        line([[knotX-21,y+height*0.48],[knotX-7,y+height*0.37],[knotX+13,y+height*0.39],[knotX+26,y+height*0.48]],"rgba(118,64,27,.29)",1.2);
+      }
+    } else if (["modern","cyber","future"].includes(theme.id)) {
+      const cyber=theme.id==="cyber", future=theme.id==="future", step=wall?128:256;
+      for(let y=0;y<size;y+=step) for(let x=0;x<size;x+=step) {
+        g.fillStyle=cyber?"rgba(38,49,91,.27)":"rgba(71,123,144,.10)"; g.fillRect(x+5,y+5,step-10,step-10);
+        g.fillStyle=cyber?"rgba(157,171,214,.18)":"rgba(247,254,238,.28)"; g.fillRect(x+8,y+8,step-16,step-18);
+        line([[x+1,y+step-1],[x+step-1,y+step-1],[x+step-1,y+1]],cyber?"rgba(33,34,72,.55)":"rgba(88,131,151,.37)",2);
+        const corner=15;
+        for(const a of [[corner,corner],[step-corner,corner],[corner,step-corner],[step-corner,step-corner]]) ellipse(x+a[0],y+a[1],2.2,2.2,0,cyber?"#7c95b7":"#8aacb2");
+        if(cyber) {
+          line([[x+23,y+41],[x+62,y+41],[x+77,y+57],[x+77,y+91]],"rgba(77,224,225,.58)",3);
+          line([[x+step-24,y+step-35],[x+step-73,y+step-35]],"rgba(238,142,212,.75)",4);
+        } else if(future) {
+          g.fillStyle="rgba(77,174,165,.30)"; g.fillRect(x+step*0.25,y+step-14,step*0.5,5);
+          for(let k=0;k<3;k++) { g.fillStyle="rgba(222,164,86,.52)"; g.fillRect(x+17+k*7,y+19,4,8); }
+        } else if((x+y)%512===0) {
+          for(let k=0;k<4;k++) line([[x+21+k*7,y+step-33],[x+25+k*7,y+step-22]],"rgba(80,131,146,.32)",2);
+        }
+      }
+    } else {
+      const wet=theme.id==="wetcave", ruin=theme.id==="ruins";
+      if(ruin) {
+        const stepY=ruin?128:96;
+        for(let row=-1;row<6;row++) for(let col=-1;col<5;col++) {
+          const x=col*168+(row%2)*84,y=row*stepY;
+          g.fillStyle=(row+col)%3?"rgba(245,233,205,.13)":"rgba(79,80,96,.10)";
+          g.fillRect(x+3,y+3,161,stepY-6);
+          line([[x+4,y+stepY-3],[x+165,y+stepY-3],[x+165,y+4]],ruin?"rgba(136,108,70,.35)":"rgba(69,66,97,.22)",2.5);
+          line([[x+8,y+5],[x+159,y+5]],"rgba(255,238,204,.28)",2);
+        }
+      }
+      if(wall && !ruin) for(let i=0;i<9;i++) {
+        const y=i*61+(i%2)*11;
+        line([[-10,y],[70,y+7],[147,y-6],[235,y+9],[326,y-4],[419,y+5],[522,y]],wet?"rgba(64,116,137,.24)":"rgba(93,70,121,.24)",3+(i%3)*2);
+        line([[-10,y-4],[70,y+3],[147,y-10],[235,y+5],[326,y-8],[419,y+1],[522,y-4]],"rgba(241,229,215,.25)",2);
+      }
+      for(let i=0;i<(wall?100:200);i++) {
+        const x=R(i,1)*size,y=R(i,2)*size,r=2+R(i,3)*(wall?8:11);
+        ellipse(x,y,r,r*(0.4+R(i,4)*0.4),R(i,5)*3,wet?i%3?"rgba(82,159,167,.22)":"rgba(216,238,223,.40)":i%3?"rgba(138,107,87,.18)":"rgba(255,235,188,.5)");
+        if(i%7===0) line([[x-r*0.6,y-r*0.3],[x+r*0.3,y-r*0.35]],"rgba(255,245,208,.36)",1.5);
+        if(i%23===0) line([[x,y],[x+9,y+8],[x+18,y+5],[x+25,y+13]],wet?"rgba(53,124,139,.20)":"rgba(111,87,93,.24)",1.5);
+      }
+      if(wet) for(let i=0;i<15;i++) {
+        const x=R(i,41)*size,y=R(i,42)*size;
+        ellipse(x,y,17+R(i,44)*27,7+R(i,45)*12,R(i,43)*3,"rgba(41,173,174,.24)");
+        line([[x-9,y-4],[x+8,y-5]],"rgba(198,246,232,.57)",2);
+      }
+      if(ruin) for(let i=0;i<28;i++) ellipse(R(i,91)*size,R(i,92)*size,11+R(i,93)*14,5+R(i,94)*7,0.4,"rgba(102,144,82,.23)");
+    }
+    return materialTexture(canvas);
+  }
+
+  let volumeTexture = null;
+  const FINISH = { stone:0, foliage:1, wood:2, panel:3, plain:4, water:5, blossom:6, metal:7 };
+  function volumeAtlas() {
+    if(volumeTexture) return volumeTexture;
+    const size=1024, cell=256, canvas=document.createElement("canvas"); canvas.width=canvas.height=size;
+    const g=canvas.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,size,size);
+    for(const [name,slot] of Object.entries(FINISH)) {
+      const ox=(slot%4)*cell,oy=Math.floor(slot/4)*cell;
+      g.save(); g.translate(ox,oy); g.beginPath(); g.rect(0,0,cell,cell); g.clip();
+      g.fillStyle="#eef0e6"; g.fillRect(0,0,cell,cell);
+      for(let i=0;i<150;i++) {
+        const x=hash01(i+slot*43,7)*cell,y=hash01(i+slot*13,23)*cell;
+        g.fillStyle=i%3?"rgba(255,255,246,.14)":"rgba(42,49,42,.08)";
+        g.beginPath(); g.ellipse(x,y,4+hash01(i,13)*14,3+hash01(i,16)*8,hash01(i,17)*3,0,Math.PI*2);g.fill();
+      }
+      if(name==="foliage") for(let i=0;i<150;i++) {
+        const x=hash01(i+47,52)*cell,y=hash01(i+18,93)*cell,a=hash01(i,82)*6;
+        g.fillStyle=i%4===0?"#fbf4bb":i%3===0?"#c0ceaa":"#e0e8c8";
+        g.beginPath();g.ellipse(x,y,5+hash01(i,29)*7,2.8,a,0,Math.PI*2);g.fill();
+        g.strokeStyle="rgba(78,104,59,.18)";g.lineWidth=1;g.beginPath();g.moveTo(x-3*Math.cos(a),y-3*Math.sin(a));g.lineTo(x+4*Math.cos(a),y+4*Math.sin(a));g.stroke();
+      }
+      if(name==="wood") for(let i=0;i<44;i++) {
+        const x=hash01(i,16)*cell;
+        g.strokeStyle=i%3?"rgba(69,43,26,.23)":"rgba(255,245,211,.47)";g.lineWidth=1+hash01(i,32)*3;
+        g.beginPath();g.moveTo(x,-3);g.bezierCurveTo(x+12,70,x-9,180,x+3,260);g.stroke();
+      }
+      if(name==="stone") for(let i=0;i<16;i++) {
+        const x=hash01(i+7,14)*cell,y=hash01(i+12,24)*cell;
+        g.strokeStyle="rgba(75,68,90,.16)";g.lineWidth=1.5;g.beginPath();g.moveTo(x,y);g.lineTo(x+15,y+9);g.lineTo(x+28,y+5);g.stroke();
+      }
+      if(name==="panel" || name==="metal") {
+        g.fillStyle="rgba(43,61,81,.13)";g.fillRect(22,23,212,8);g.fillRect(22,223,212,6);
+        for(let k=0;k<5;k++){g.fillStyle="rgba(56,68,81,.19)";g.fillRect(36,47+k*14,90,5);}
+        for(const [x,y] of [[17,16],[239,16],[17,240],[239,240]]){g.fillStyle="#8eaaa7";g.beginPath();g.arc(x,y,3.5,0,Math.PI*2);g.fill();}
+      }
+      if(name==="water") {g.fillStyle="rgba(255,255,255,.6)";g.fillRect(49,89,55,3);g.fillRect(88,121,81,3);}
+      g.restore();
+    }
+    volumeTexture=materialTexture(canvas); volumeTexture.wrapS=volumeTexture.wrapT=THREE.ClampToEdgeWrapping;
+    return volumeTexture;
   }
 
   function makeSeamlessTex(size, seed, palette) {
@@ -799,7 +958,9 @@
     if (!solids[shape]) {
       solids[shape] = shape === "rock" ? new THREE.IcosahedronGeometry(0.5, 0)
         : shape === "round" ? new THREE.SphereGeometry(0.5, 7, 4)
-        : shape === "leafball" ? new THREE.SphereGeometry(0.5, 6, 3)
+        : shape === "bud" ? new THREE.SphereGeometry(0.5, 5, 2)
+        : shape === "shrub" ? new THREE.SphereGeometry(0.5, 7, 3)
+        : shape === "leafball" ? new THREE.SphereGeometry(0.5, 8, 4)
         : shape === "crystal" ? new THREE.CylinderGeometry(0.015, 0.5, 1, 5)
         : shape === "column" ? new THREE.CylinderGeometry(0.5, 0.5, 1, 8)
         : shape === "cone" ? new THREE.CylinderGeometry(0.12, 0.5, 1, 7)
@@ -812,7 +973,10 @@
     const point = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {
       point.fromBufferAttribute(p, i).applyMatrix4(matrix);
-      builder.vert(point.x, point.y, point.z, uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0, meta);
+      const slot = FINISH[meta.finish || "stone"] || 0;
+      const u = uv ? uv.getX(i) : 0, v = uv ? uv.getY(i) : 0;
+      builder.vert(point.x, point.y, point.z, ((slot % 4) + 0.018 + u * 0.964) / 4,
+        1 - (Math.floor(slot / 4) + 0.982 - v * 0.964) / 4, meta);
     }
     if (geo.index) for (let i = 0; i < geo.index.count; i += 3) builder.tri(base + geo.index.getX(i), base + geo.index.getX(i + 1), base + geo.index.getX(i + 2));
     else for (let i = 0; i < p.count; i += 3) builder.tri(base + i, base + i + 1, base + i + 2);
@@ -831,8 +995,8 @@
     function wallVar(x, y) { return fbm(x * 0.27 + 11.7, y * 0.27 + 5.1) > 0.51 ? 1 : 0; }
     function F(v) { return v ? fbB : fb; }
     function W(v) { return v ? wbB : wb; }
-    function metaFor(x, y, color, tone) {
-      return { kind: "environment", cells: [{ x, y, room: isRoom(map, x, y) }], surfaceColor: new THREE.Color(color), tone: tone == null ? 1 : tone };
+    function metaFor(x, y, color, tone, finish) {
+      return { kind: "environment", cells: [{ x, y, room: isRoom(map, x, y) }], surfaceColor: new THREE.Color(color), tone: tone == null ? 1 : tone, finish: finish || "stone" };
     }
     function floorVertex(x, y, v) {
       const key = x + "," + y, cache = floorIndices[v];
@@ -888,6 +1052,9 @@
         if (env.form === "timber-bays" || env.form === "service-bays") depth = t > 0 && t < 1 ? 0.21 : 0;
         if (env.form === "utility-stacks") depth = t > 0 && t < 1 ? 0.29 : 0;
         if (env.form === "pressure-shells") depth = t === 0.18 || t === 0.78 ? 0.22 : 0.09;
+        // Every facade shares its endpoint profile with its neighbour. The old
+        // normal-offset endpoints opened bright cracks at concave room corners.
+        depth *= Math.sin(Math.PI * u);
         return { x: baseX + (topX - baseX) * t - nx * depth, y: -0.02 + (top0.y + (top1.y - top0.y) * u + 0.02) * t, z: baseZ + (topZ - baseZ) * t - nz * depth };
       }
       for (let row = 0; row < levels.length - 1; row++) for (let col = 0; col < across; col++) {
@@ -900,20 +1067,27 @@
       const cx = (wx(ax) + wx(bx)) / 2, cz = (wz(ay) + wz(by)) / 2;
       const height = (top0.y + top1.y) / 2;
       const rotation = [0, Math.atan2(tx, tz) - Math.PI / 2, 0];
-      const stone = metaFor(wallX, wallY, env.stone), secondary = metaFor(wallX, wallY, env.secondary), accent = metaFor(wallX, wallY, env.accent), detail = metaFor(wallX, wallY, env.detail);
-      function solid(shape, along, depth, y, sx, sy, sz, material, turn, lean) {
-        // All rotated assemblies are fitted inside their impassable wall cell.
-        // Taller silhouettes never acquire collision or spill into paths.
-        const angle = turn || 0;
-        const tilt = lean || 0;
-        // Lean is used only by timber braces and stays in the wall-face plane.
+      const organic = ["rootbank", "broken-masonry", "karst", "strata"].includes(env.form);
+      const finish = organic ? "stone" : env.form === "timber-bays" ? "wood" : "panel";
+      const stone = metaFor(wallX, wallY, env.stone, 1, finish);
+      const secondary = metaFor(wallX, wallY, env.secondary, 1, env.form === "rootbank" ? "wood" : finish);
+      const accent = metaFor(wallX, wallY, env.accent, 1, env.form === "rootbank" || env.form === "broken-masonry" ? "foliage" : env.form === "karst" ? "water" : finish);
+      const detail = metaFor(wallX, wallY, env.detail, 1, "plain");
+      const foliage = metaFor(wallX, wallY, 0x7eba83, 1, "foliage");
+      function solid(shape, along, depth, y, sx, sy, sz, material, turn, lean, wide) {
+        const angle = turn || 0, tilt = lean || 0;
+        // Crowns may bridge consecutive solid bank cells, never a path/corner.
+        const continuous = wide && isWall(map,wallX+tx,wallY+tz) && isWall(map,wallX-tx,wallY-tz)
+          && inMap(map,wallX+tx,wallY+tz) && inMap(map,wallX-tx,wallY-tz);
+        const span = continuous ? 0.73 : 0.48;
+        if(continuous) sx *= 1.4;
         let tangentRadius = (Math.abs(Math.cos(angle)) * (Math.abs(Math.cos(tilt)) * sx + Math.abs(Math.sin(tilt)) * sy) + Math.abs(Math.sin(angle)) * sz) / 2;
         let normalRadius = (Math.abs(Math.sin(angle)) * (Math.abs(Math.cos(tilt)) * sx + Math.abs(Math.sin(tilt)) * sy) + Math.abs(Math.cos(angle)) * sz) / 2;
-        const fit = Math.min(1, 0.48 / Math.max(tangentRadius, normalRadius));
+        const fit = Math.min(1, span / tangentRadius, 0.48 / normalRadius);
         sx *= fit; sy *= fit; sz *= fit;
         tangentRadius *= fit; normalRadius *= fit;
         depth = clamp(depth, normalRadius + 0.015, 0.985 - normalRadius);
-        along = clamp(along, -0.495 + tangentRadius, 0.495 - tangentRadius);
+        along = clamp(along, -span + tangentRadius, span - tangentRadius);
         const rot = rotation.slice(); rot[1] += angle; rot[2] = tilt;
         addSolid(structures, shape, [cx + tx * along - nx * depth, y, cz + tz * along - nz * depth], [sx, sy, sz], rot, material);
       }
@@ -924,101 +1098,153 @@
       if (!dressedWalls.has(wallKey)) {
         dressedWalls.add(wallKey);
         if (env.form === "strata") {
-          // Layered lavender rock shelves with warm mineral seams and bright,
-          // faceted turquoise crystal outcrops that rise above the cliff.
-          solid("rock", 0.02, 0.40, height * 0.69, 0.88, height * 0.86, 0.70, secondary, (n - 0.5) * 0.26);
-          if (n > 0.38) {
-            solid("rock", -0.07, 0.44, height + 0.05, 0.70, 0.26, 0.65, stone);
-            for (let k = 0; k < 3; k++) solid("crystal", -0.23 + k * 0.22, 0.42, height + 0.13 + (k === 1 ? 0.13 : 0), 0.20, 0.28 + (k === 1 ? 0.27 : 0.05), 0.22, k === 1 ? accent : detail);
+          // Uneven bedrock is continuous; only selected pockets grow crystals.
+          solid("rock", -0.16, 0.40, height * 0.66, 0.78, height * 0.90, 0.74, stone, n * 0.5);
+          solid("round", 0.22, 0.43, height * 0.88, 0.54, 0.42, 0.69, secondary, -n * 0.4);
+          if (n > 0.73) {
+            for(let k=0;k<3;k++) solid("crystal", -0.23+k*0.22, 0.43+k*0.05, height+0.10+(k===1?0.16:0), 0.17+k*0.018, 0.24+(k===1?0.38:0.05), 0.18, k===1?accent:detail, (k-1)*0.10);
             landmark("crystal-cluster");
+          } else if(n<0.29) {
+            solid("round", -0.12, 0.43, height+0.05, 0.65, 0.26, 0.66, stone, n*2);
+            solid("round", 0.23, 0.39, height+0.02, 0.31, 0.22, 0.40, secondary);
+          }
+          if(n>0.38 && n<0.63) {
+            solid("column", 0.24, 0.20, 0.20, 0.07, 0.18, 0.07, detail);
+            solid("round", 0.22, 0.22, 0.30, 0.23, 0.09, 0.22, accent);
           }
         } else if (env.form === "rootbank") {
-          // Low rounded earth banks disappear beneath broad tree crowns;
-          // trunks, moss, roots and shrubs have their own dimensional shape.
-          solid("leafball", 0, 0.43, height + 0.02, 0.91, 0.32, 0.87, accent);
-          if (n > 0.42) {
-            solid("column", 0.02, 0.47, height + 0.23, 0.22, 0.62, 0.24, secondary);
-            solid("leafball", 0, 0.48, height + 0.70, 0.92, 0.69, 0.86, accent);
-            solid("leafball", -0.14, 0.41, height + 0.88, 0.56, 0.36, 0.52, detail);
+          // Trees occur as groves rather than one identical icon per grid cell.
+          const leafDark=metaFor(wallX,wallY,0x50894b,1,"foliage");
+          const leafLight=metaFor(wallX,wallY,0xb4d85d,1,"foliage");
+          const blossom=metaFor(wallX,wallY,n>0.8?0xf2c3ce:0xf2d981,1,"blossom");
+          const grow=0.84+n*0.22;
+          solid("shrub", -0.19, 0.40, height+0.10, 0.57, 0.29, 0.59, leafDark, n);
+          solid("shrub", 0.20, 0.40, height+0.15, 0.49, 0.33, 0.57, accent, -n);
+          if(n>0.57) {
+            solid("cone", -0.08, 0.49, height+0.28, 0.27, 0.68*grow, 0.27, secondary);
+            solid("column", 0.11, 0.48, height+0.49, 0.10, 0.34, 0.11, secondary, 0,-0.36);
+            solid("leafball", -0.22, 0.48, height+0.74*grow, 0.83, 0.53, 0.75, leafDark, 0.13,0,true);
+            solid("leafball", 0.17, 0.52, height+0.91*grow, 0.84, 0.63, 0.82, accent, -0.12,0,true);
+            solid("leafball", -0.21, 0.39, height+1.03*grow, 0.69, 0.46, 0.65, leafLight, 0.21,0,true);
+            solid("leafball", 0.24, 0.27, height+0.81*grow, 0.59, 0.41, 0.49, accent, -0.19);
+            if(n>0.83) for(let k=0;k<4;k++) solid("bud", -0.23+k*0.12, 0.23, height+0.71+(k%2)*0.12, 0.09, 0.055, 0.09, blossom);
             landmark("leafy-tree");
+          } else if(n>0.30) {
+            solid("shrub", -0.16, 0.40, height+0.32, 0.59, 0.38, 0.60, leafLight,n);
+            solid("shrub", 0.17, 0.26, height+0.24, 0.46, 0.33, 0.44, accent,-n);
+            for(let k=0;k<3;k++) solid("bud", -0.20+k*0.17, 0.21, height+0.35+(k%2)*0.09, 0.075, 0.045, 0.08, blossom);
+            landmark("flowering-shrub");
           } else {
-            solid("leafball", -0.15, 0.36, height + 0.21, 0.48, 0.44, 0.51, detail);
-            solid("rock", 0.23, 0.40, height + 0.15, 0.37, 0.28, 0.41, stone);
+            solid("rock", -0.17, 0.39, height+0.15, 0.42, 0.38, 0.55, stone,n*2);
+            solid("rock", 0.16, 0.41, height+0.07, 0.31, 0.21, 0.36, stone,-n);
           }
-          if (n > 0.64) for (const d of [-1, 1]) solid("round", d * 0.21, 0.24, 0.20, 0.38, 0.16, 0.33, secondary, d * 0.22);
         } else if (env.form === "karst") {
-          // Rounded blue limestone contrasts with narrow tapering dripstone
-          // chimneys and violet mushroom shelves around the waterline.
-          solid("round", 0.03, 0.45, height * 0.76, 0.84, height * 1.10, 0.82, stone);
-          if (n > 0.32) {
-            solid("cone", -0.19, 0.43, height + 0.22, 0.30, 0.80, 0.33, secondary);
-            solid("cone", 0.20, 0.38, height + 0.05, 0.23, 0.47, 0.26, accent);
+          solid("round", -0.17, 0.42, height*0.72, 0.74, height*1.03, 0.73, stone, n);
+          solid("round", 0.22, 0.43, height*0.94, 0.52, 0.43, 0.65, secondary, -n);
+          if(n>0.76) {
+            solid("cone", -0.15, 0.45, height+0.23, 0.35, 0.85, 0.38, secondary);
+            solid("cone", 0.22, 0.39, height+0.05, 0.22, 0.41, 0.28, stone);
             landmark("dripstone-grotto");
-          }
-          if (n > 0.62) {
-            solid("column", 0.22, 0.20, 0.35, 0.10, 0.29, 0.10, secondary);
-            solid("round", 0.19, 0.24, 0.52, 0.41, 0.17, 0.43, detail);
+          } else if(n>0.42) {
+            for(let k=0;k<3;k++) {
+              solid("column", -0.24+k*0.20, 0.27, 0.24+k*0.09, 0.06, 0.21, 0.07, secondary);
+              solid("round", -0.24+k*0.20, 0.24, 0.35+k*0.09, 0.26+k*0.03, 0.105, 0.26, k%2?accent:detail);
+            }
+            landmark("mushroom-garden");
           }
         } else if (env.form === "broken-masonry") {
-          // The silhouette is a staggered block ruin, with gaps in the upper
-          // courses, fallen capstones and occasional fluted pillar remnants.
-          for (let k = 0; k < 2; k++) solid("box", -0.22 + k * 0.45, 0.34, height + 0.12, 0.43, 0.24, 0.60, k ? secondary : stone);
-          if (n > 0.43) {
-            solid("box", 0.12, 0.35, height + 0.34, 0.64, 0.20, 0.58, secondary);
-            solid("column", -0.25, 0.38, height + 0.38, 0.29, 0.76, 0.30, stone);
-            solid("box", -0.22, 0.39, height + 0.78, 0.48, 0.14, 0.45, secondary, 0.07);
+          // A low ruined wall with occasional columns, fallen blocks and ivy.
+          for(let k=0;k<2;k++) solid("box", -0.22+k*0.45, 0.38, height+0.09, 0.43, 0.18+n*0.12, 0.61, k?secondary:stone,(n-0.5)*0.06);
+          if(n>0.77) {
+            solid("box", -0.12, 0.42, height+0.27, 0.53, 0.19, 0.58, secondary);
+            solid("column", -0.12, 0.40, height+0.49, 0.32, 0.71, 0.33, stone);
+            solid("column", -0.12, 0.40, height+0.78, 0.38, 0.13, 0.38, secondary);
+            solid("box", -0.12, 0.42, height+0.89, 0.53, 0.12, 0.47, secondary,0.06);
             landmark("broken-column");
-          } else solid("box", -0.12, 0.33, height + 0.31, 0.47, 0.19, 0.47, stone, -0.12);
-          if (n > 0.65) solid("leafball", 0.25, 0.31, height + 0.27, 0.37, 0.18, 0.45, accent);
+          } else if(n>0.40) solid("box", 0.12, 0.42, height+0.29, 0.57, 0.18, 0.47, secondary,(n-0.5)*0.7);
+          if(n<0.34) for(let k=0;k<3;k++) solid("leafball", -0.22+k*0.19, 0.17, height+0.10-k*0.07, 0.30, 0.18, 0.24, accent,n);
         } else if (env.form === "timber-bays") {
-          // Paired structural posts, inset wooden siding and occasional
-          // diagonal braces make these read as a timber building, not rock.
-          for (const d of [-1, 1]) solid("box", d * 0.40, 0.18, 0.59, 0.16, 1.18, 0.28, secondary);
-          for (let k = 0; k < 3; k++) solid("box", 0, 0.21, 0.24 + k * 0.25, 0.67, 0.22, 0.26, k % 2 ? stone : accent);
-          solid("box", 0, 0.27, 1.15, 0.97, 0.18, 0.45, secondary);
-          if (n > 0.52) solid("box", 0, 0.12, 0.65, 0.12, 0.81, 0.13, secondary, 0, -0.65);
-          if (n > 0.78) {
-            solid("box", 0.23, 0.12, 0.83, 0.23, 0.33, 0.18, detail);
-            solid("box", 0.23, 0.03, 0.83, 0.13, 0.22, 0.06, accent);
+          // A continuous cottage wall, with deep framing only at structural bays.
+          for(let k=0;k<4;k++) solid("box", 0, 0.30, 0.15+k*0.235, 0.99, 0.22, 0.40, k%2?stone:accent);
+          solid("box", 0, 0.26, 1.09, 0.99, 0.15, 0.42, secondary);
+          if((wallX+wallY)%3===0) {
+            solid("box", 0, 0.16, 0.56, 0.18, 1.16, 0.29, secondary);
+            solid("box", 0.20, 0.16, 0.87, 0.11, 0.49, 0.16, secondary,0,-0.70);
+            landmark("timber-frame");
+          } else if(n>0.65) {
+            solid("box", 0, 0.095, 0.67, 0.57, 0.55, 0.13, secondary);
+            solid("box", 0, 0.028, 0.69, 0.43, 0.40, 0.027, detail);
+            solid("box", 0, 0.045, 0.68, 0.045, 0.47, 0.048, accent);
+            solid("box", 0, 0.044, 0.68, 0.48, 0.042, 0.048, accent);
+            solid("box", 0, 0.17, 0.38, 0.69, 0.10, 0.28, secondary);
           }
-          landmark("timber-frame");
+          if(n<0.17) {
+            solid("column", 0.21, 0.22, 0.22, 0.30, 0.37, 0.31, secondary);
+            solid("leafball", 0.20, 0.23, 0.46, 0.41, 0.31, 0.41, foliage);
+          }
         } else if (env.form === "service-bays") {
-          // Tall blue service cabinets and broad tinted glass panels are
-          // punctuated by louvers, amber control buttons and roof vents.
-          solid("box", 0, 0.40, 0.64, 0.87, 1.19, 0.72, stone);
-          solid("box", -0.18, 0.045, 0.77, 0.38, 0.53, 0.06, secondary);
-          for (let k = 0; k < 3; k++) solid("box", 0.23, 0.047, 0.60 + k * 0.12, 0.23, 0.055, 0.07, detail);
-          solid("box", 0.21, 0.035, 0.98, 0.10, 0.10, 0.055, accent);
-          if (n > 0.55) solid("box", -0.12, 0.39, 1.29, 0.51, 0.17, 0.43, secondary);
-          landmark("vent-cabinet");
+          solid("box", 0, 0.42, 0.58, 0.99, 1.04, 0.71, stone);
+          solid("box", 0, 0.20, 0.11, 0.99, 0.18, 0.34, secondary);
+          if(n>0.77) {
+            solid("box", -0.09, 0.20, 0.64, 0.62, 0.96, 0.33, secondary);
+            solid("box", -0.09, 0.024, 0.79, 0.43, 0.38, 0.036, detail);
+            for(let k=0;k<3;k++) solid("box", -0.09, 0.038, 0.34+k*0.08, 0.40, 0.035, 0.04, stone);
+            solid("box", 0.20, 0.027, 0.83, 0.065, 0.08, 0.04, accent);
+            landmark("vent-cabinet");
+          } else if((wallX+wallY)%3!==0) {
+            solid("box", 0, 0.11, 0.69, 0.79, 0.54, 0.14, secondary);
+            solid("box", 0, 0.027, 0.71, 0.69, 0.43, 0.026, detail);
+            solid("box", 0.24, 0.044, 0.71, 0.035, 0.47, 0.036, stone);
+          } else {
+            solid("box", 0, 0.12, 0.34, 0.55, 0.28, 0.20, accent);
+            solid("leafball", -0.11, 0.17, 0.59, 0.35, 0.41, 0.30, foliage);
+            solid("leafball", 0.15, 0.18, 0.55, 0.30, 0.29, 0.28, foliage);
+          }
         } else if (env.form === "utility-stacks") {
-          // Uneven narrow stacks, cable ducts and bold inset colored screens
-          // create a layered neon machine district without glowing wall rims.
-          solid("box", -0.20, 0.40, 0.72 + n * 0.08, 0.42, 1.24 + n * 0.16, 0.64, secondary);
-          solid("box", 0.25, 0.35, 0.53, 0.40, 0.97, 0.55, stone);
-          solid("box", -0.20, 0.064, 0.88, 0.30, 0.33, 0.08, detail);
-          for (let k = 0; k < 2; k++) solid("box", -0.20, 0.02, 0.83 + k * 0.10, 0.20, 0.04, 0.032, accent);
-          solid("column", 0.28, 0.075, 0.66, 0.10, 0.55, 0.10, accent);
-          if (n > 0.58) solid("box", -0.19, 0.37, 1.43, 0.36, 0.12, 0.54, detail);
-          landmark("neon-stack");
+          solid("box", 0, 0.45, 0.52, 0.99, 0.92, 0.78, secondary);
+          solid("box", 0, 0.25, 0.19, 0.99, 0.18, 0.41, stone);
+          if(n>0.64) {
+            solid("box", -0.20, 0.35, 0.75+n*0.09, 0.40, 1.30+n*0.12, 0.61, stone);
+            solid("box", 0.23, 0.36, 0.65, 0.42, 1.07, 0.59, secondary);
+            solid("box", -0.19, 0.025, 0.93, 0.28, 0.34, 0.027, detail);
+            for(let k=0;k<3;k++) solid("box", -0.19, 0.02, 0.83+k*0.075, 0.20-k*0.025, 0.035, 0.023, accent);
+            solid("column", 0.29, 0.10, 0.79, 0.095, 0.63, 0.10, accent);
+            landmark("neon-stack");
+          } else if(n>0.29) {
+            solid("box", 0, 0.086, 0.69, 0.70, 0.53, 0.10, stone);
+            solid("box", 0, 0.020, 0.70, 0.59, 0.41, 0.024, accent);
+            for(let k=0;k<3;k++) solid("box", -0.12+k*0.13, 0.018, 0.66, 0.075, 0.12+k*0.065, 0.020, secondary);
+          } else {
+            for(let k=0;k<2;k++) solid("column", -0.18+k*0.31, 0.18, 0.70, 0.15, 0.81, 0.16, stone);
+            solid("box", 0, 0.12, 0.52, 0.63, 0.16, 0.12, detail);
+          }
         } else if (env.form === "pressure-shells") {
-          // Raised mint capsule pods sit on octagonal feet, with segmented
-          // side ribs and inset amber/teal consoles. Their curved roofs are
-          // the primary silhouette instead of another squared wall loop.
-          solid("column", 0, 0.47, 0.21, 0.85, 0.29, 0.84, secondary);
-          solid("round", 0, 0.47, 0.78, 0.90, 1.13, 0.88, stone);
-          for (const d of [-1, 1]) solid("round", d * 0.33, 0.37, 0.73, 0.19, 0.84, 0.40, secondary);
-          solid("box", 0, 0.07, 0.73, 0.34, 0.39, 0.12, accent);
-          solid("box", 0, 0.025, 0.79, 0.22, 0.16, 0.035, detail);
-          if (n > 0.65) solid("column", 0, 0.47, 1.34, 0.31, 0.13, 0.32, accent);
-          landmark("pressure-pod");
+          // Continuous laboratory shell with occasional pods and planted alcoves.
+          solid("box", 0, 0.46, 0.56, 0.99, 0.90, 0.77, stone);
+          solid("box", 0, 0.25, 0.14, 0.99, 0.16, 0.42, secondary);
+          if(n>0.73) {
+            solid("column", 0, 0.43, 0.22, 0.78, 0.25, 0.78, secondary);
+            solid("round", 0, 0.43, 0.76, 0.81, 1.02, 0.80, stone);
+            for(const d of [-1,1]) solid("round", d*0.28, 0.30, 0.70, 0.14, 0.75, 0.31, secondary);
+            solid("box", 0, 0.04, 0.72, 0.32, 0.40, 0.05, accent);
+            solid("box", 0, 0.018, 0.83, 0.21, 0.07, 0.021, detail);
+            landmark("pressure-pod");
+          } else if(n>0.25) {
+            solid("box", 0, 0.10, 0.66, 0.72, 0.46, 0.15, secondary);
+            solid("box", 0, 0.022, 0.68, 0.60, 0.34, 0.03, accent);
+            for(let k=0;k<3;k++) solid("box", -0.15+k*0.15, 0.018, 0.67, 0.08, 0.15-k*0.025, 0.021, detail);
+          } else {
+            solid("box", 0, 0.17, 0.33, 0.62, 0.23, 0.26, secondary);
+            solid("leafball", -0.14, 0.24, 0.63, 0.37, 0.43, 0.36, foliage);
+            solid("leafball", 0.18, 0.23, 0.58, 0.30, 0.32, 0.30, foliage);
+          }
         }
       }
       // Only low, non-blocking surface detail along wide room margins. The
       // tile centre, every corridor and the stairs/spawn neighbourhood stay clear.
       const reserved = [map.stairs, map.playerSpawn].some(p => p && Math.abs(p.x - floorX) + Math.abs(p.y - floorY) <= 1);
       const corridor = !isRoom(map, floorX, floorY) || (isWall(map, floorX - 1, floorY) && isWall(map, floorX + 1, floorY)) || (isWall(map, floorX, floorY - 1) && isWall(map, floorX, floorY + 1));
-      if (!reserved && !corridor && n > 0.36) {
+      if (!reserved && !corridor && n > 0.78 && env.form !== "rootbank") {
         const material = metaFor(floorX, floorY, env.form === "karst" ? env.accent : env.secondary, 0.84);
         const natural = env.relief > 0;
         addSolid(surfaces, natural ? "round" : "box", [cx + nx * 0.095, 0.006, cz + nz * 0.095], [0.68, env.form === "karst" ? 0.013 : 0.027, 0.16], rotation, material);
@@ -1031,29 +1257,34 @@
       if (isWall(map, x, y + 1)) facade(x + 1, y + 1, x, y + 1, x, y + 1, x, y);
       if (isWall(map, x - 1, y)) facade(x, y + 1, x, y, x - 1, y, x, y);
     }
-    // Shallow walkable material islands distinguish the ground as well as the
-    // walls. They stay within a single tile, below 4 cm, and away from exits and
-    // the entry position. No collision, elevation rule or navigation change.
+    // Restrained low relief at natural room edges only; texture carries the
+    // walkable material everywhere, leaving actors and items the visual priority.
     for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-      if (!isFloor(map, x, y) || !isRoom(map, x, y)) continue;
-      if ([map.stairs, map.playerSpawn].some(p => p && Math.abs(p.x - x) + Math.abs(p.y - y) <= 1)) continue;
-      const n = hash01(x * 41 + 13, y * 29 + 7);
-      const material = metaFor(x, y, env.form === "rootbank" || env.form === "karst" ? env.accent : env.ground, 0.92);
-      const base = (floorH(x, y, map) + floorH(x + 1, y + 1, map)) / 2;
-      if (env.form === "rootbank" && floorVar(x, y) && n > 0.68) {
-        addSolid(surfaces, "round", [x, base + 0.002, y], [0.90, 0.040, 0.73], [0, n * 2, 0], material);
-      } else if (env.form === "karst" && n > 0.67 && (isWall(map,x-1,y) || isWall(map,x+1,y) || isWall(map,x,y-1) || isWall(map,x,y+1))) {
-        addSolid(surfaces, "round", [x, base + 0.003, y], [0.81, 0.015, 0.69], [0, n * 2, 0], material);
-      } else if (env.form === "broken-masonry" && n > 0.59) {
-        addSolid(surfaces, "box", [x, base + 0.007, y], [0.68 + n * 0.13, 0.025, 0.62], [0, (n - 0.7) * 0.25, 0], material);
-      } else if (env.form === "timber-bays" && n > 0.24) {
-        for (let k = 0; k < 3; k++) addSolid(surfaces, "box", [x, base + 0.004 + k * 0.002, y - 0.32 + k * 0.32], [0.97, 0.013, 0.30], [0, 0, 0], material);
-      } else if (env.form === "service-bays" && (x + y) % 3 === 0) {
-        addSolid(surfaces, "box", [x, base + 0.004, y], [0.89, 0.012, 0.87], [0, 0, 0], material);
-      } else if (env.form === "utility-stacks" && n > 0.64) {
-        for (let k = 0; k < 4; k++) addSolid(surfaces, "box", [x - 0.27 + k * 0.18, base + 0.004, y], [0.135, 0.015, 0.64], [0, 0, 0], material);
-      } else if (env.form === "pressure-shells" && (x + y) % 3 === 0) {
-        addSolid(surfaces, "column", [x, base + 0.006, y], [0.85, 0.015, 0.85], [0, Math.PI / 8, 0], material);
+      if (!isFloor(map,x,y) || !isRoom(map,x,y)) continue;
+      if ([map.stairs,map.playerSpawn].some(p=>p && Math.abs(p.x-x)+Math.abs(p.y-y)<=1)) continue;
+      const n=hash01(x*41+13,y*29+7), edge=isWall(map,x-1,y)||isWall(map,x+1,y)||isWall(map,x,y-1)||isWall(map,x,y+1);
+      const base=(floorH(x,y,map)+floorH(x+1,y+1,map))/2;
+      if(env.form==="rootbank" && edge && n>0.42) {
+        for(let k=0;k<3;k++) {
+          const color=k===2 ? (n>0.7?0xf2ca87:0xecc2d6) : env.accent;
+          const material=metaFor(x,y,color,1,k===2?"blossom":"foliage");
+          addSolid(surfaces,"bud",[x-0.26+k*0.24,base+0.001,y+(n-0.5)*0.5],[0.23,0.026,0.17],[0,n*4+k,0],material);
+        }
+      } else if(env.form==="karst" && edge && n>0.55) {
+        const material=metaFor(x,y,env.accent,1,"water");
+        addSolid(surfaces,"round",[x,base+0.002,y],[0.74,0.013,0.58],[0,n*3,0],material);
+      } else if(env.form==="broken-masonry" && edge && n>0.73) {
+        const material=metaFor(x,y,env.secondary,1,"stone");
+        addSolid(surfaces,"box",[x,base+0.002,y],[0.47,0.023,0.36],[0,n*0.6,0],material);
+      } else if(["service-bays","pressure-shells","utility-stacks"].includes(env.form) && n>0.95) {
+        const material=metaFor(x,y,env.secondary,1,"metal");
+        addSolid(surfaces,"box",[x,base+0.001,y],[0.37,0.012,0.31],[0,0,0],material);
+      } else if(env.form==="timber-bays" && edge && n>0.94) {
+        const material=metaFor(x,y,env.secondary,1,"wood");
+        addSolid(surfaces,"box",[x,base+0.001,y],[0.48,0.012,0.12],[0,n*0.6,0],material);
+      } else if(env.form==="strata" && edge && n>0.76) {
+        const material=metaFor(x,y,env.secondary,1,"stone");
+        addSolid(surfaces,"round",[x+0.11,base+0.001,y-0.12],[0.24,0.025,0.17],[0,n*2,0],material);
       }
     }
     // Close exposed backs of the thin cutaway shell, including map boundaries.
@@ -1077,8 +1308,8 @@
     floorMeshB = mesh(fbB, "dungeon-floor-secondary", dirtTexB); floorMetaB = fbB.meta;
     wallMesh = mesh(wb, "dungeon-wall", rockTex); wallMeta = wb.meta;
     wallMeshB = mesh(wbB, "dungeon-wall-secondary", rockTexB); wallMetaB = wbB.meta;
-    environmentMesh = mesh(structures, "dungeon-environment-volumes", null); environmentMeta = structures.meta;
-    surfaceMesh = mesh(surfaces, "dungeon-surface-inlays", null, env.form === "karst"); surfaceMeta = surfaces.meta;
+    environmentMesh = mesh(structures, "dungeon-environment-volumes", volumeAtlas()); environmentMeta = structures.meta;
+    surfaceMesh = mesh(surfaces, "dungeon-surface-inlays", volumeAtlas(), env.form === "karst"); surfaceMeta = surfaces.meta;
     buildStairsDecor(map);
     buildDecos(map);
   }
@@ -1575,15 +1806,15 @@
     dirtTex = makeSeamlessTex(256, 3, [232, 210, 160]);
     rockTex = makeSeamlessTex(256, 19, [180, 192, 208]);
 
-    hemi = new THREE.HemisphereLight(0xfff0d8, 0xa8c8b8, 0.78);
+    hemi = new THREE.HemisphereLight(0xfff9e9, 0xa8c8b8, 1.02);
     scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xfff4e0, 0.7);
+    const dir = new THREE.DirectionalLight(0xfff4df, 1.12);
     dir.position.set(10, 16, 12);
     scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xb8d8e8, 0.28);
+    const fill = new THREE.DirectionalLight(0xd2ecff, 0.38);
     fill.position.set(-8, 6, -4);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0xf0e8d8, 0.38));
+    scene.add(new THREE.AmbientLight(0xfff7e8, 0.42));
 
     playerLight = new THREE.PointLight(0xffd090, 0.5, 6);
     scene.add(playerLight);

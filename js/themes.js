@@ -10,7 +10,7 @@
   const THEMES = [
     {
       id: "cave", name: "洞窟",
-      fog: 0xc5e4ef, fogDensity: 0.03,
+      fog: 0xdce9e9, fogDensity: 0.012,
       hemiSky: 0xfff0d8, hemiGround: 0xa8c8b8,
       lightColor: 0xffd090,
       phong: { specular: 0x1a1a1a, shininess: 4 },
@@ -29,7 +29,7 @@
     },
     {
       id: "forest", name: "森林",
-      fog: 0xd4ecd2, fogDensity: 0.032,
+      fog: 0xd5ecc2, fogDensity: 0.011,
       hemiSky: 0xf2ffe0, hemiGround: 0x9cc09a,
       lightColor: 0xe8ffd8,
       phong: { specular: 0x141414, shininess: 3 },
@@ -48,7 +48,7 @@
     },
     {
       id: "wetcave", name: "潮湿洞窟",
-      fog: 0xc2dcec, fogDensity: 0.042,
+      fog: 0xc8e5e9, fogDensity: 0.017,
       hemiSky: 0xeaf6ff, hemiGround: 0x88a8b8,
       lightColor: 0xbfe8ff,
       phong: { specular: 0x9fc8e8, shininess: 70 },
@@ -68,7 +68,7 @@
     },
     {
       id: "ruins", name: "遗迹",
-      fog: 0xe6d8c0, fogDensity: 0.028,
+      fog: 0xf0e0c3, fogDensity: 0.012,
       hemiSky: 0xfff0d0, hemiGround: 0xb0a088,
       lightColor: 0xffe2b0,
       phong: { specular: 0x201810, shininess: 5 },
@@ -87,7 +87,7 @@
     },
     {
       id: "wooden", name: "木制建筑",
-      fog: 0xecdcc0, fogDensity: 0.032,
+      fog: 0xf1d6b3, fogDensity: 0.011,
       hemiSky: 0xffedd0, hemiGround: 0xb09068,
       lightColor: 0xffd8a0,
       phong: { specular: 0x2a2014, shininess: 8 },
@@ -106,7 +106,7 @@
     },
     {
       id: "modern", name: "现代建筑",
-      fog: 0xe2e6ee, fogDensity: 0.022,
+      fog: 0xdcebee, fogDensity: 0.009,
       hemiSky: 0xffffff, hemiGround: 0xa8b0c0,
       lightColor: 0xf4f8ff,
       phong: { specular: 0x3c424c, shininess: 18 },
@@ -123,7 +123,7 @@
     },
     {
       id: "cyber", name: "赛博朋克",
-      fog: 0x655889, fogDensity: 0.030,
+      fog: 0x8b85b5, fogDensity: 0.014,
       hemiSky: 0xd9ceff, hemiGround: 0x7389ab,
       lightColor: 0xd9c4ff,
       phong: { specular: 0x8868c8, shininess: 26 },
@@ -143,7 +143,7 @@
     },
     {
       id: "future", name: "未来科技",
-      fog: 0xe8f2ff, fogDensity: 0.02,
+      fog: 0xddeff0, fogDensity: 0.009,
       hemiSky: 0xf0f8ff, hemiGround: 0xa8c0d8,
       lightColor: 0xcfe8ff,
       phong: { specular: 0x9fc0e0, shininess: 32 },
@@ -164,14 +164,14 @@
   // Visual-only environment specifications. None of these fields enter map generation,
   // movement, collision or the gameplay RNG. Structure is expressed in world units.
   const ENVIRONMENTS = {
-    cave:    { form: "strata", height: 0.86, relief: 0.30, inset: 0.14, floorRelief: 0.040, stone: 0x9c89bd, secondary: 0xc8a6cf, accent: 0x52bfd0, ground: 0xe1c59d, detail: 0xefb65f, shape: "mote" },
-    forest:  { form: "rootbank", height: 0.38, relief: 0.18, inset: 0.22, floorRelief: 0.045, stone: 0x91a65b, secondary: 0xa26e48, accent: 0x69b768, ground: 0xc5d58c, detail: 0xa4d975, shape: "leaf" },
-    wetcave: { form: "karst", height: 0.64, relief: 0.23, inset: 0.18, floorRelief: 0.030, stone: 0x6596b2, secondary: 0x9dc7cb, accent: 0x49bec1, ground: 0xa9cfd0, detail: 0xb49cda, shape: "rain" },
-    ruins:   { form: "broken-masonry", height: 0.39, relief: 0.16, inset: 0.07, floorRelief: 0.020, stone: 0xcfa56e, secondary: 0xe9c18c, accent: 0x6dac91, ground: 0xe6ceaa, detail: 0xc88159, shape: "mote" },
-    wooden:  { form: "timber-bays", height: 0.83, relief: 0, inset: 0.07, floorRelief: 0.012, stone: 0xce9865, secondary: 0x895740, accent: 0xe9b66f, ground: 0xe6c392, detail: 0x6baba1, shape: "mote" },
-    modern:  { form: "service-bays", height: 0.62, relief: 0, inset: 0.07, floorRelief: 0.006, stone: 0x91bdcf, secondary: 0x587f9c, accent: 0xefb35c, ground: 0xc5d9df, detail: 0x76c3c0, shape: "mote" },
-    cyber:   { form: "utility-stacks", height: 0.43, relief: 0, inset: 0.10, floorRelief: 0.008, stone: 0x786fa5, secondary: 0x586b98, accent: 0x57d0d3, ground: 0x909abb, detail: 0xe47abe, shape: "rain" },
-    future:  { form: "pressure-shells", height: 0.32, relief: 0, inset: 0.15, floorRelief: 0.005, stone: 0xbadbdc, secondary: 0x70a4be, accent: 0x69cbc1, ground: 0xcbdfe0, detail: 0xf0b16d, shape: "mote" },
+    cave:    { form: "strata", height: 0.62, relief: 0.37, inset: 0.14, floorRelief: 0.030, stone: 0xa697bf, secondary: 0xcdb4cf, accent: 0x58c4d3, ground: 0xdac4a2, detail: 0xf0c377, shape: "mote" },
+    forest:  { form: "rootbank", height: 0.23, relief: 0.15, inset: 0.13, floorRelief: 0.025, stone: 0x9da776, secondary: 0x996a43, accent: 0x7eb650, ground: 0xb9cb7c, detail: 0xc1d982, shape: "leaf" },
+    wetcave: { form: "karst", height: 0.52, relief: 0.29, inset: 0.15, floorRelief: 0.025, stone: 0x7da7b6, secondary: 0xb0caca, accent: 0x5ebfbc, ground: 0xadc9c4, detail: 0xc6a5db, shape: "rain" },
+    ruins:   { form: "broken-masonry", height: 0.36, relief: 0.16, inset: 0.07, floorRelief: 0.020, stone: 0xc6a47b, secondary: 0xe1c299, accent: 0x85ad78, ground: 0xddcca8, detail: 0xbf845f, shape: "mote" },
+    wooden:  { form: "timber-bays", height: 0.76, relief: 0, inset: 0.04, floorRelief: 0.012, stone: 0xd8ae79, secondary: 0x986440, accent: 0xe4bd80, ground: 0xd9b17b, detail: 0x87bfc6, shape: "mote" },
+    modern:  { form: "service-bays", height: 0.74, relief: 0, inset: 0.04, floorRelief: 0.006, stone: 0xb5d0d6, secondary: 0x6c96aa, accent: 0xe6b165, ground: 0xd1dddd, detail: 0x8dbdc8, shape: "mote" },
+    cyber:   { form: "utility-stacks", height: 0.65, relief: 0, inset: 0.06, floorRelief: 0.008, stone: 0x8d7ca9, secondary: 0x596c94, accent: 0x6adddc, ground: 0x8c95b5, detail: 0xed9ad5, shape: "rain" },
+    future:  { form: "pressure-shells", height: 0.73, relief: 0, inset: 0.05, floorRelief: 0.005, stone: 0xd5e2dc, secondary: 0x85acba, accent: 0x85cdc6, ground: 0xd8e5df, detail: 0xedba76, shape: "mote" },
   };
   for (const theme of THEMES) {
     theme.environment = ENVIRONMENTS[theme.id];

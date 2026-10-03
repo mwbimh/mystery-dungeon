@@ -853,6 +853,109 @@ async function collectNaturalItem(page, accepts) {
   assert.fail('the player could not reach the natural item');
 }
 
+// Read-only inverse of the actual game's camera-relative keyboard mapping.
+// Arrow chords use the real chord buffer; no synthetic DOM dispatch or focus.
+async function pressWorldStep(page, worldKey) {
+  const desired = { ArrowUp:[0,-1], ArrowRight:[1,0], ArrowDown:[0,1], ArrowLeft:[-1,0] }[worldKey];
+  assert.ok(desired, 'the route planner returns one cardinal world step');
+  const input = await page.evaluate(([dx, dy]) => {
+    const candidates = [[0,-1,'ArrowUp'], [1,0,'ArrowRight'], [0,1,'ArrowDown'], [-1,0,'ArrowLeft'],
+      [-1,-1,'ArrowUp+ArrowLeft'], [1,-1,'ArrowUp+ArrowRight'], [1,1,'ArrowDown+ArrowRight'], [-1,1,'ArrowDown+ArrowLeft']];
+    const selected = candidates.find(([sx, sy]) => {
+      const mapped = MD.view3d.screenToTileDir(sx, sy);
+      return mapped[0] === dx && mapped[1] === dy;
+    });
+    const p = MD_STATE.player;
+    return { keys:selected?.[2], yaw:MD.view3d.getYaw(), x:p.x, y:p.y,
+      occupied:MD_STATE.enemies.some(enemy => enemy.alive && enemy.x === p.x + dx && enemy.y === p.y + dy) };
+  }, desired);
+  assert.ok(input.keys, 'camera yaw ' + input.yaw + ' has a real key combination for ' + worldKey);
+  const after = await pressTurn(page, input.keys);
+  const expected = input.occupied ? [input.x, input.y] : [input.x + desired[0], input.y + desired[1]];
+  assert.deepEqual([after.player.x, after.player.y], expected, 'camera-relative input moves or attacks the planned world tile');
+  return after;
+}
+
+test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-relative pickup', { timeout:90000 }, async () => {
+  const context = await browser.newContext({ viewport:{ width:1440, height:960 }, reducedMotion:'reduce' });
+  // Control exactly fresh()'s one seed draw. Three's UUID/material/texture
+  // allocation must keep native randomness before and after that call.
+  await context.addInitScript(() => {
+    const originalRandom = Math.random;
+    Math.random = function () {
+      const caller = (new Error().stack || '').split('\n')[2] || '';
+      if (/\bfresh\b/.test(caller) && /\/js\/game\.js[?:]/.test(caller)) {
+        Math.random = originalRandom;
+        return 4 / 4294967296;
+      }
+      return originalRandom();
+    };
+  });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const { nextStepToItem } = require('./helpers/journey-path.cjs');
+  const observe = () => page.evaluate(() => {
+    const s = MD_STATE, key = actor => MD.key(actor.x, actor.y);
+    return { visibleItems:s.items.filter(item => s.visible.has(key(item))).length,
+      visibleEnemies:s.enemies.filter(enemy => enemy.alive && s.visible.has(key(enemy))).length,
+      roomId:MD.getRoomId(s.map, s.player.x, s.player.y), visible:s.visible.size, explored:s.explored.size,
+      cells:s.map.width * s.map.height, debug:s.debug, preview:!!MD.preview };
+  });
+  try {
+    await loaded(page, '');
+    assert.equal(await page.evaluate(() => MD.random.getState()), 4, 'only the ordinary fresh journey seed was controlled');
+    assert.match(await page.evaluate(() => Math.random.toString()), /\[native code\]/, 'native UUID randomness is restored immediately after the seed draw');
+    await depart(page);
+    await page.waitForFunction(() => MD.view3d?.active && !!MD_STATE.player?._vid);
+    assert.equal(await page.evaluate(() => {
+      const gl = document.getElementById('game').getContext('webgl2');
+      return !!gl && !gl.isContextLost();
+    }), true, 'ordinary gameplay must use actual WebGL');
+    assert.equal(await page.evaluate(() => typeof MD.debugFloor), 'undefined');
+    const start = await playerState(page);
+    assert.ok(start.bag.every(item => item === null));
+    fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive:true });
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-departure.png'), fullPage:true });
+
+    let current = start, encounter = await observe();
+    for (let steps = 0; steps < current.map.width * current.map.height; steps++) {
+      if (encounter.roomId >= 0 && encounter.visibleItems > 0 && encounter.visibleEnemies > 0) break;
+      const direction = nextStepToItem(current, () => true);
+      assert.ok(direction, 'naturally generated floor loot is reachable without crossing stairs');
+      current = await pressWorldStep(page, direction);
+      encounter = await observe();
+    }
+    assert.ok(encounter.roomId >= 0 && encounter.visibleItems > 0 && encounter.visibleEnemies > 0,
+      'the screenshot must show a real room with naturally generated enemies and ground loot');
+    assert.equal(encounter.debug, false); assert.equal(encounter.preview, false);
+    assert.ok(encounter.visible > 0 && encounter.visible < encounter.cells, 'normal FOV remains enabled');
+    assert.ok(encounter.explored > encounter.visible, 'the genuine walk leaves remembered terrain behind');
+    assert.notDeepEqual([current.player.x,current.player.y], [start.player.x,start.player.y]);
+    await page.waitForFunction(() => MD_STATE.enemies.filter(enemy => enemy.alive && MD_STATE.visible.has(MD.key(enemy.x, enemy.y))).every(enemy => !!enemy._vid));
+    await assertFixedStage(page, 'normal WebGL encounter');
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-natural-encounter.png'), fullPage:true });
+
+    // Turn the camera through its public key control, then recompute the input
+    // mapping before continuing the same live journey toward the visible loot.
+    const yaw = await page.evaluate(() => MD.view3d.getYaw()), turn = current.turn;
+    await page.keyboard.press('q');
+    assert.notEqual(await page.evaluate(() => MD.view3d.getYaw()), yaw);
+    assert.equal(await page.evaluate(() => MD_STATE.turn), turn, 'camera orbit is not a gameplay turn');
+    for (let steps = 0; !current.bag.some(Boolean) && steps < current.map.width * current.map.height; steps++) {
+      const direction = nextStepToItem(current, () => true);
+      assert.ok(direction, 'the live pickup remains reachable after camera orbit');
+      current = await pressWorldStep(page, direction);
+    }
+    assert.ok(current.bag.some(Boolean), 'real keyboard movement picks up naturally spawned loot');
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-after-pickup.png'), fullPage:true });
+    await page.locator('#btnInv').click();
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-loot-in-bag.png'), fullPage:true });
+    await page.locator('#btnInvClose').click();
+    await pressTurn(page, 'Space');
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
 test('continuous new-player journey keeps actual keys working through town, modals, loot, reload and natural return', { timeout: 120000 }, async () => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: 'reduce' });
   // Control only the new-run random seed before any application code executes.

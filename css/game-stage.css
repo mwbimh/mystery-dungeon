@@ -115,7 +115,13 @@ button.hud-seal,.inv-actions button { min-height:30px; border:3px solid #fffdf2;
 body.town-panel-open #townOverlay::after { position:fixed; inset:0; background:#3864655c; backdrop-filter:none; }
 .hud.hud-log { right:16px; bottom:128px; width:282px; max-height:180px; padding:18px 22px; background:#fffde6e8; border:4px solid #fffef4; border-radius:8px 14px 9px 12px; box-shadow:0 3px #709fa655; }
 .hud-log h2 { font-size:14px; }
-.hud-log .log { min-height:48px; font-size:11px; color:#4f7075; }
+.hud-log .log { min-height:48px; font-size:12px; color:#47666b; }
+.hud-log .log div { color:#47666b; }
+.hud-log .log div.fresh { color:#315968; }
+.hud-log .log div.good { color:#2b6f53; }
+.hud-log .log div.warn { color:#825b21; }
+.hud-log .log div.bad { color:#a43f40; }
+.hud-log .log div.special { color:#814858; }
 .hud.hud-log.collapsed { width:125px; padding:9px 12px; }
 .hover-info { color:#4e7272; background:#fffde6dd; border:2px solid #fffefa; border-radius:5px; font-size:11px; }
 .hover-info:empty { display:none; }
@@ -154,7 +160,7 @@ body.town-panel-open #townOverlay::after { position:fixed; inset:0; background:#
 .pvn-stage { width:min(1240px,100%); gap:0; align-items:flex-end; }
 .pvn-portrait { flex:0 0 28%; height:min(560px,69vh); }
 .pvn-portrait-image { left:-9%; width:126%; bottom:12px; transform:none; filter:drop-shadow(3px 0 #fffef8) drop-shadow(-3px 0 #fffef8) drop-shadow(0 3px #fffef8) drop-shadow(0 -3px #fffef8) drop-shadow(0 8px 5px #315e5b55); }
-.pvn-card { flex:1; max-height:calc(100dvh - 60px); padding:9px 15px 8px; border-style:solid; border-width:28px 29px; border-image:url('../assets/runtime/ui/game-stage/dialogue-frame.svg') 90 78 85 78 fill stretch; border-radius:0; background:none; box-shadow:none; transform:none; }
+.pvn-card { flex:1; max-height:calc(100dvh - 60px); padding:9px 15px 8px; border-style:solid; border-width:28px 29px; border-image:url('../assets/runtime/ui/game-stage/dialogue-frame.svg') 90 78 85 78 fill stretch; border-radius:0; background:none; box-shadow:none; transform:none; animation:pvn-fade-in .18s ease-out both; }
 .pvn-card::after { display:none; }
 .pvn-heading { margin:0 0 12px; padding-bottom:7px; border-bottom:0; }
 .pvn-chapter { color:#80a3a5; font-size:10px; font-weight:800; }
@@ -284,7 +290,7 @@ body.town-panel-open #townOverlay::after { position:fixed; inset:0; background:#
   .hud-bag,.hud-bag img { width:54px; }
   .hud.hud-log { right:8px; bottom:90px; width:200px; max-height:130px; padding:11px 13px; }
   .hud.hud-log.collapsed { width:108px; padding:6px 9px; }
-  .hud-log .log { font-size:10px; }
+  .hud-log .log { font-size:11px; }
   .hud.hud-inv,body.town-panel-open #hudInv { top:46%; flex-direction:row; max-height:calc(100dvh - 170px); max-width:calc(100vw - 16px); gap:4px; overflow:auto; }
   .hud.hud-inv .hud-inv-body,body.town-panel-open #hudInv .hud-inv-body { width:min(336px,calc(100vw - 24px)); min-width:min(300px,calc(100vw - 24px)); padding:5px 3px 8px; border-width:62px 55px 51px; flex:none; }
   .hud.hud-inv .hud-wh,body.town-panel-open #hudInv .hud-wh { width:300px; min-width:300px; padding:5px 3px 8px; border-width:58px 49px 49px; flex:none; }

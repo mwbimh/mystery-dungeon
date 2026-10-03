@@ -96,3 +96,24 @@ test('HTML and game-stage CSS references resolve to real local asset bytes, neve
   assert.ok(artwork.length >= 12, 'the background and complete reusable UI art set exist');
   for (const name of artwork) assert.ok(references.has(path.join(stage, name)), name + ' is used by the live HTML or stylesheet');
 });
+
+test('semantic HUD log text remains readable over the darkest cream-panel composite', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'css/game-stage.css'), 'utf8');
+  function luminance(hex) {
+    const channels = hex.match(/[\da-f]{2}/gi).map(value => parseInt(value, 16) / 255)
+      .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+    return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+  }
+  const background = luminance('e8e6d1');
+  for (const semantic of ['', 'fresh', 'good', 'warn', 'bad', 'special']) {
+    const selector = '.hud-log .log div' + (semantic ? '.' + semantic : '');
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rules = [...css.matchAll(new RegExp(escaped + '\\s*\\{([^}]+)\\}', 'g'))];
+    assert.ok(rules.length > 0, selector + ' explicitly overrides legacy light text');
+    const color = rules.at(-1)[1].match(/(?:^|;)\s*color\s*:\s*#([\da-f]{6})\b/i);
+    assert.ok(color, selector + ' declares a concrete foreground');
+    const foreground = luminance(color[1]);
+    const ratio = (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05);
+    assert.ok(ratio >= 4.5, selector + ' contrast ' + ratio.toFixed(2) + ':1 must reach 4.5:1');
+  }
+});
