@@ -165,17 +165,66 @@
     }
   }
 
+  // A shared screen-space safe area for both renderers. Controls can change
+  // size (save text, status effects, narrow screens), so use their real bounds
+  // instead of giving the minimap a second hard-coded top-right anchor.
+  function layoutMinimap(map, W, H, obstacles = []) {
+    const margin = 12, gap = 10, border = 8;
+    const scale = Math.min(2, (Math.min(176, W - margin * 2) - border) / map.width,
+      (Math.min(144, H * 0.27) - border) / map.height);
+    const width = Math.ceil(map.width * scale + border);
+    const height = Math.ceil(map.height * scale + border);
+    const x = W - width - margin;
+    let y = margin;
+    const bounds = obstacles.filter(rect => rect && rect.width > 0 && rect.height > 0);
+    // Moving below one header may meet another, taller header in a narrow view.
+    for (let pass = 0; pass <= bounds.length; pass++) {
+      const collisions = bounds.filter(rect => x < rect.x + rect.width + gap && x + width + gap > rect.x
+        && y < rect.y + rect.height + gap && y + height + gap > rect.y);
+      if (!collisions.length) break;
+      y = Math.max(...collisions.map(rect => rect.y + rect.height + gap));
+    }
+    return Object.freeze({ x, y, width, height, scale });
+  }
+
   function drawMinimap(ctx, state, W, H) {
     const map = state.map;
-    const scale = 2;
-    const mw = map.width * scale;
-    const mh = map.height * scale;
-    const ox = W - mw - 12;
-    const oy = 12;
+    const host = document.getElementById("hudMinimap");
+    const canvas = document.getElementById("minimapCanvas");
+    const ownContext = canvas && canvas.getContext && canvas.getContext("2d");
+    const independent = host && ownContext && typeof ownContext.clearRect === "function";
+    let obstacles = [];
+    if (independent) {
+      W = (document.documentElement && document.documentElement.clientWidth) || global.innerWidth || W;
+      H = (document.documentElement && document.documentElement.clientHeight) || global.innerHeight || H;
+      obstacles = Array.from(document.querySelectorAll(".session-controls,.hud-vitals,#btnInv,#previewBanner")).filter(node => {
+        const style = global.getComputedStyle(node);
+        return !node.hidden && style.display !== "none" && style.visibility !== "hidden";
+      }).map(node => node.getBoundingClientRect());
+    }
+    const layout = layoutMinimap(map, W, H, obstacles);
+    const scale = layout.scale, mw = map.width * scale, mh = map.height * scale;
+    let ox = layout.x + 4, oy = layout.y + 4;
+    if (independent) {
+      for (const key of ["width", "height"]) {
+        const value = layout[key] + "px";
+        if (host.style[key] !== value) host.style[key] = value;
+      }
+      for (const [key, value] of [["left", layout.x], ["top", layout.y]]) {
+        if (host.style[key] !== value + "px") host.style[key] = value + "px";
+      }
+      const dpr = Math.min(global.devicePixelRatio || 1, 2);
+      const width = Math.ceil(layout.width * dpr), height = Math.ceil(layout.height * dpr);
+      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+      ctx = ownContext;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, layout.width, layout.height);
+      ox = oy = 4;
+    }
     ctx.fillStyle = "rgba(10,14,20,0.72)";
     ctx.fillRect(ox - 4, oy - 4, mw + 8, mh + 8);
     ctx.strokeStyle = "#314562";
-    ctx.strokeRect(ox - 4.5, oy - 4.5, mw + 8, mh + 8);
+    ctx.strokeRect(ox - 3.5, oy - 3.5, mw + 7, mh + 7);
 
     const explored = state.explored;
     const debug = state.debug;
@@ -196,6 +245,8 @@
   }
 
   function updateSidePanel(state) {
+    const minimap = document.getElementById("hudMinimap");
+    if (minimap) minimap.hidden = state.mode !== "dungeon";
     const floorEl = document.getElementById("statFloor");
     const hpEl = document.getElementById("statHp");
     const bellyEl = document.getElementById("statBelly");
@@ -284,6 +335,7 @@
   MD.TILE_PX = TILE_PX;
   MD.drawGame = drawGame;
   MD.drawOverlay = drawOverlay;
+  MD.layoutMinimap = layoutMinimap;
   MD.updateSidePanel = updateSidePanel;
   MD.screenToTile = screenToTile;
 })(typeof window !== "undefined" ? window : globalThis);

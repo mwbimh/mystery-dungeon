@@ -64,6 +64,8 @@ body.shell-open #hudSkills { visibility:hidden; pointer-events:none; }
 
 /* A compact illustrated explorer HUD, sharing the town's cut-paper palette. */
 .hud-left { top:10px; left:12px; }
+.hud.hud-minimap { position:fixed; z-index:9; left:0; top:0; right:auto; bottom:auto; margin:0; padding:0; border:0; border-radius:0; background:none; box-shadow:none; pointer-events:none; }
+.hud-minimap canvas { display:block; width:100%; height:100%; }
 .hud-vitals { position:relative; padding:3px 16px 3px 4px; gap:4px; min-width:325px; background:url('../assets/runtime/ui/game-stage/hud-vitals.svg') center/100% 100% no-repeat; }
 .hud-avatar { width:80px; height:85px; background:none; }
 .hud-avatar::before { content:''; position:absolute; inset:6px 2px 15px; border:5px solid #fffdf3; border-radius:50%; background:#aee0e7; box-shadow:0 2px #67a9b6; }

@@ -54,7 +54,7 @@
     let optionalFailure = false;
     for (const file of files) {
       stage('点亮小镇', '载入程序 · ' + file);
-      try { await script(file + '?v=70'); } catch (error) {
+      try { await script(file + '?v=72'); } catch (error) {
         if (!['vendor/three.min.js', 'js/sprites.js', 'js/view3d.js'].includes(file)) throw error;
         optionalFailure = true; console.warn(error.message + '，尝试兼容绘制');
       }

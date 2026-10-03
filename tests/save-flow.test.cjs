@@ -37,6 +37,62 @@ test('managed startup is paused and keyboard cannot start a hidden journey', asy
   assert.equal(h.state.mode, 'town'); assert.equal(h.state.player, null);
 });
 
+test('shared minimap layout is finite, immutable and inside six unobstructed viewport sizes', async () => {
+  const h = await game();
+  for (const [width, height] of [[1440,900], [1280,720], [390,844], [320,640], [844,390], [390,780]]) {
+    for (const map of [{ width:30, height:26 }, { width:52, height:34 }, { width:61, height:61 }]) {
+      const before = plain(map), layout = h.MD.layoutMinimap(map, width, height);
+      assert.equal(Object.isFrozen(layout), true);
+      for (const value of Object.values(layout)) assert.ok(Number.isFinite(value));
+      assert.ok(layout.scale > 0 && layout.scale <= 2);
+      assert.equal(layout.width, Math.ceil(map.width * layout.scale + 8));
+      assert.equal(layout.height, Math.ceil(map.height * layout.scale + 8));
+      assert.equal(layout.x + layout.width, width - 12);
+      assert.equal(layout.y, 12);
+      assert.ok(layout.x >= 12 && layout.y + layout.height <= height - 12);
+      assert.deepEqual(map, before, 'the layout never mutates generated map dimensions');
+    }
+  }
+});
+
+test('minimap avoids normal save controls, vitals, bag and preview header without depending on obstacle order', async () => {
+  const h = await game();
+  for (const [width, height] of [[1440,900], [1280,720], [390,844], [320,640], [844,390], [390,780]]) {
+    const compact = width <= 700;
+    const controls = [
+      { x:width - (compact ? 74 : 262), y:12, width:compact ? 64 : 244, height:compact ? 36 : 43 },
+      { x:compact ? 3 : 12, y:compact ? 5 : 10, width:compact ? 230 : 325, height:94 },
+      { x:10, y:104, width:compact ? 54 : 67, height:67 },
+    ];
+    for (const obstacles of [controls, [...controls, { x:0, y:0, width, height:22 }]]) {
+      const before = plain(obstacles), map = { width:52, height:34 };
+      const layout = h.MD.layoutMinimap(map, width, height, obstacles);
+      assert.deepEqual(plain(h.MD.layoutMinimap(map, width, height, [...obstacles].reverse())), plain(layout));
+      for (const rect of obstacles) {
+        const separated = layout.x >= rect.x + rect.width + 10 || layout.x + layout.width + 10 <= rect.x
+          || layout.y >= rect.y + rect.height + 10 || layout.y + layout.height + 10 <= rect.y;
+        assert.ok(separated, width + '×' + height + ' keeps a ten-pixel safe gap around ' + JSON.stringify(rect));
+      }
+      assert.ok(layout.x >= 0 && layout.y >= 0 && layout.x + layout.width <= width && layout.y + layout.height <= height);
+      assert.deepEqual(obstacles, before, 'measured controls remain untouched');
+    }
+  }
+});
+
+test('minimap resolves stacked collisions repeatedly and ignores zero-area hidden controls', async () => {
+  const h = await game(), map = { width:52, height:34 };
+  const blockers = [
+    { x:250, y:110, width:120, height:58 },
+    { x:250, y:12, width:128, height:43 },
+    { x:0, y:0, width:0, height:780 },
+    { x:0, y:0, width:390, height:0 },
+    null,
+  ];
+  const layout = h.MD.layoutMinimap(map, 390, 780, blockers);
+  assert.equal(layout.y, 178, 'the map clears both stacked right-hand controls');
+  assert.deepEqual(plain(h.MD.layoutMinimap(map, 390, 780, [blockers[1], blockers[0]])), plain(layout));
+});
+
 test('closing dungeon bag and help restores playable focus for the very next key', async () => {
   const h = await game(); begin(h); h.state.enemies = [];
   for (const [open, close] of [['btnInv', 'btnInvClose'], ['btnHelp', 'btnHelpClose']]) {

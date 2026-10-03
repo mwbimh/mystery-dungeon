@@ -116,6 +116,29 @@ async function assertInsideViewport(page, selector, label) {
   assert.ok(box.x >= -1 && box.y >= -1 && box.x + box.width <= size.width + 1 && box.y + box.height <= size.height + 1,
     label + ' fits viewport: ' + JSON.stringify(box));
 }
+async function assertNormalHudSafe(page, label) {
+  const selectors = { minimap:'#hudMinimap', session:'.session-controls', vitals:'.hud-vitals', bag:'#btnInv' };
+  const boxes = {};
+  for (const [name, selector] of Object.entries(selectors)) {
+    await assertInsideViewport(page, selector, label + ' ' + name);
+    boxes[name] = await page.locator(selector).boundingBox();
+  }
+  for (const [a, b] of [['minimap','session'], ['minimap','vitals'], ['minimap','bag'], ['session','vitals'], ['session','bag']]) {
+    const first = boxes[a], second = boxes[b];
+    const width = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
+    const height = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
+    assert.ok(width <= 1 || height <= 1, `${label} ${a}/${b} overlap ${width}×${height}: ${JSON.stringify(boxes)}`);
+  }
+  assert.equal(await page.locator('#minimapCanvas').evaluate(canvas => canvas.width > 0 && canvas.height > 0), true,
+    label + ' uses the shared real minimap canvas');
+  const saving = await page.locator('#saveStatus').textContent();
+  assert.ok(saving.trim().length > 0, label + ' includes the real normal-mode save status');
+  if (page.viewportSize().width > 700) assert.equal(await page.locator('#saveStatus').isVisible(), true,
+    label + ' desktop save status remains visible');
+  assert.equal(await page.locator('#btnSessionMenu').isVisible(), true, label + ' normal journey control remains visible');
+  assert.equal(await page.evaluate(() => !!MD.preview), false, label + ' is not a designer preview');
+  await assertFixedStage(page, label);
+}
 
 async function savedSnapshot(page) {
   return page.evaluate(() => ({ ...MD.session.snapshot(), playTimeMs: 0 }));
@@ -952,6 +975,20 @@ test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-
     await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-loot-in-bag.png'), fullPage:true });
     await page.locator('#btnInvClose').click();
     await pressTurn(page, 'Space');
+    await page.waitForFunction(() => document.getElementById('saveStatus').textContent.includes('已自动保存'));
+    const checkpoint = await savedSnapshot(page);
+    for (const [name, width, height] of [['wide',1440,900], ['laptop',1280,720], ['phone',390,844],
+      ['small',320,640], ['landscape',844,390], ['short-phone',390,780]]) {
+      await page.setViewportSize({ width,height });
+      // Observe the first completed redraw after a native viewport resize.
+      // No UI mutation, camera reset, focus repair or substitute preview is used.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      await assertNormalHudSafe(page, 'normal WebGL ' + name);
+      assert.deepEqual(await savedSnapshot(page), checkpoint, name + ' resize never changes the live journey');
+      if (['wide','phone','small','landscape'].includes(name)) {
+        await page.screenshot({ path:path.join(ROOT, 'test-results/normal-hud-safe-' + name + '.png'), fullPage:true });
+      }
+    }
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });

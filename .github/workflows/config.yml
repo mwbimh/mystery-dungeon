@@ -74,6 +74,7 @@ jobs:
           path: |
             test-results/game-dungeon-*.png
             test-results/normal-webgl-*.png
+            test-results/normal-hud-safe-*.png
             test-results/save-default-renderer.png
             test-results/multidungeon-training-grove.png
             test-results/continuous-player-journey.png
@@ -88,6 +89,7 @@ jobs:
             test-results/*.png
             !test-results/game-dungeon-*.png
             !test-results/normal-webgl-*.png
+            !test-results/normal-hud-safe-*.png
             !test-results/save-default-renderer.png
             !test-results/multidungeon-training-grove.png
             !test-results/continuous-player-journey.png
