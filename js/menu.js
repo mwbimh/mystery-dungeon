@@ -241,7 +241,7 @@
   $('btnSessionMenu').onclick = () => perform(open);
   document.addEventListener('keydown', event => {
     if (event.defaultPrevented) return;
-    if (root.hidden) { if (event.key === 'Escape' && !(MD.dialogue && MD.dialogue.isOpen()) && !MD_STATE.invOpen && !MD_STATE.aiming && !MD_STATE.skillAiming && $('helpOverlay').classList.contains('hidden') && $('endOverlay').classList.contains('hidden')) { event.preventDefault(); perform(open); } return; }
+    if (root.hidden) { if (event.key === 'Escape' && !(MD.dialogue && MD.dialogue.isOpen()) && !MD_STATE.invOpen && !MD_STATE.aiming && !MD_STATE.skillAiming && $('helpOverlay').classList.contains('hidden') && $('endOverlay').classList.contains('hidden') && (!$('routeOverlay') || $('routeOverlay').classList.contains('hidden'))) { event.preventDefault(); perform(open); } return; }
     if (event.key === 'Escape' && !busy) { event.preventDefault(); if (page !== 'main') perform(renderMain); else if (activeSlot) closeShell(); }
     if (event.key === 'Tab') { const nodes = [...root.querySelectorAll('button:not(:disabled),a[href],input,select')].filter(n => !n.hidden); const first = nodes[0], last = nodes[nodes.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
   });

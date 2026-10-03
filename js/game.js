@@ -34,6 +34,7 @@
   const canvas = document.getElementById("game");
   const overlay = document.getElementById("overlay");
   const inventoryHost = document.getElementById("hudInv").parentElement;
+  const skillsHost = document.getElementById("hudSkills").parentElement;
   let ctx = null;
   let overlayCtx = null;
   let use3d = false;
@@ -420,6 +421,7 @@
     hideOverlay("townOverlay");
     hideOverlay("endOverlay");
     hideOverlay("helpOverlay");
+    hideOverlay("routeOverlay");
     state.invOpen = false;
     const inv = hudInvEl();
     if (inv) inv.classList.add("collapsed");
@@ -459,9 +461,11 @@
     showOverlay("townOverlay");
     MD.saveWarehouse(state.warehouse);
     updateUI();
+    const greeting = document.getElementById("stickerChatgpt");
+    if (greeting && greeting.focus) greeting.focus({ preventScroll: true });
   }
 
-  let helpReturnFocus = null, inventoryReturnFocus = null;
+  let helpReturnFocus = null, inventoryReturnFocus = null, routeReturnFocus = null;
   function overlayVisible(id) {
     const el = document.getElementById(id);
     return !!el && !el.classList.contains("hidden");
@@ -478,6 +482,7 @@
   }
   function syncModalState() {
     const help = overlayVisible("helpOverlay"), end = overlayVisible("endOverlay");
+    const route = overlayVisible("routeOverlay");
     const dialogue = !!(MD.dialogue && MD.dialogue.isOpen());
     const townPanel = state.mode === "town" && state.invOpen;
     // The fixed game board is its own stacking context. Town inventory must be
@@ -485,16 +490,33 @@
     const inventory = document.getElementById("hudInv");
     if (townPanel && document.body && inventory.parentElement !== document.body) document.body.appendChild(inventory);
     else if (!townPanel && inventoryHost && inventoryHost.appendChild && inventory.parentElement !== inventoryHost) inventoryHost.appendChild(inventory);
+    // The loadout remains usable alongside the town bag. Keeping it inside the
+    // board's stacking context leaves it behind the town even when not inert.
+    const skills = document.getElementById("hudSkills");
+    if (state.mode === "town" && document.body && skills.parentElement !== document.body) document.body.appendChild(skills);
+    else if (state.mode !== "town" && skillsHost && skillsHost.appendChild && skills.parentElement !== skillsHost) skillsHost.appendChild(skills);
     if (document.body) {
+      document.body.classList.toggle("town-active", state.mode === "town");
       document.body.classList.toggle("town-panel-open", townPanel);
-      document.body.classList.toggle("game-modal-open", help || end || dialogue);
+      document.body.classList.toggle("game-modal-open", help || end || dialogue || route);
     }
     const town = document.getElementById("townOverlay");
-    if (town) town.inert = help || end || dialogue || townPanel;
+    if (town) town.inert = help || end || dialogue || route || townPanel;
     for (const id of ["game", "hudStats", "hudLog", "hudSkills", "hudInv"]) {
       const node = document.getElementById(id);
-      if (node) node.inert = help || end || dialogue || (state.mode === "town" && (id !== "hudInv" || !townPanel));
+      if (node) node.inert = help || end || dialogue || route || (state.mode === "town" && id !== "hudSkills" && (id !== "hudInv" || !townPanel));
     }
+  }
+  function restoreGameFocus(previous) {
+    // Restoring a dungeon toolbar button also restores its native Space/arrow
+    // handling, silently swallowing the player's next movement. Return to the
+    // board after a dungeon modal; keep the opener for town keyboard navigation.
+    const target = state.invOpen ? document.getElementById("btnInvClose")
+      : overlayVisible("routeOverlay") ? document.getElementById("btnRouteClose")
+      : state.mode === "dungeon" ? canvas
+      : previous && previous.isConnected !== false && !previous.inert ? previous
+      : document.getElementById("stickerChatgpt");
+    if (target && target.focus) target.focus({ preventScroll: true });
   }
   function showOverlay(id) {
     const el = document.getElementById(id);
@@ -512,9 +534,23 @@
     if (el) el.classList.add("hidden");
     syncModalState();
     if (id === "helpOverlay" && helpReturnFocus) {
-      if (helpReturnFocus.focus) helpReturnFocus.focus();
+      restoreGameFocus(helpReturnFocus);
       helpReturnFocus = null;
     }
+  }
+  function openRoute(trigger) {
+    if (paused || state.mode !== "town" || state.invOpen || overlayVisible("helpOverlay") || (MD.dialogue && MD.dialogue.isOpen())) return;
+    routeReturnFocus = trigger || document.activeElement;
+    clearPendingInput();
+    showOverlay("routeOverlay");
+    syncModalState();
+    const button = document.getElementById("btnRouteClose");
+    if (button) button.focus();
+  }
+  function closeRoute() {
+    hideOverlay("routeOverlay");
+    restoreGameFocus(routeReturnFocus);
+    routeReturnFocus = null;
   }
   function trapModalFocus(event, root) {
     if (!root || event.key !== "Tab") return;
@@ -528,7 +564,7 @@
       event.preventDefault(); first.focus();
     }
   }
-  MD.isGameplayInputBlocked = () => paused || state.mode !== "dungeon" || state.invOpen || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || !!(MD.dialogue && MD.dialogue.isOpen());
+  MD.isGameplayInputBlocked = () => paused || state.mode !== "dungeon" || state.invOpen || overlayVisible("routeOverlay") || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || !!(MD.dialogue && MD.dialogue.isOpen());
 
   function hudInvEl() { return document.getElementById("hudInv"); }
   function hudWhEl() { return document.getElementById("hudWh"); }
@@ -1128,7 +1164,7 @@
 
   // --- Inventory UI ---
   function openInv() {
-    if (paused || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || (MD.dialogue && MD.dialogue.isOpen())) return;
+    if (paused || overlayVisible("routeOverlay") || overlayVisible("helpOverlay") || overlayVisible("endOverlay") || (MD.dialogue && MD.dialogue.isOpen())) return;
     clearPendingInput();
     if (!state.invOpen) inventoryReturnFocus = document.activeElement;
     state.invOpen = true;
@@ -1154,8 +1190,7 @@
     if (inv) inv.classList.add("collapsed");
     syncModalState();
     if (state.mode === "town") showOverlay("townOverlay");
-    const target = inventoryReturnFocus && inventoryReturnFocus.isConnected !== false ? inventoryReturnFocus : canvas;
-    if (target && target.focus) target.focus();
+    restoreGameFocus(inventoryReturnFocus);
     inventoryReturnFocus = null;
   }
 
@@ -1628,7 +1663,11 @@
     const wh = hudWhEl();
     if (wh) wh.classList.add("collapsed");
     MD.saveWarehouse(state.warehouse);
-    if (!silent) renderInv();
+    if (!silent) {
+      renderInv();
+      const toggle = document.getElementById("btnWhToggle");
+      if (state.invOpen && toggle && toggle.focus) toggle.focus({ preventScroll: true });
+    }
   }
 
   function renderWarehouse() {
@@ -1725,6 +1764,11 @@
   function onKeyDown(e) {
     if (paused || e.defaultPrevented || (MD.dialogue && MD.dialogue.isOpen())) return;
     const key = e.key;
+    if (overlayVisible("routeOverlay")) {
+      if (key === "Escape") { e.preventDefault(); closeRoute(); }
+      else trapModalFocus(e, document.getElementById("routeOverlay"));
+      return;
+    }
     // The topmost modal owns every key, including already queued directions.
     if (overlayVisible("helpOverlay")) {
       if (key === "Escape" || key === "h" || key === "H" || key === "?") {
@@ -1966,7 +2010,7 @@
     });
   }
   function openTownDialogue(name, trigger) {
-    if (paused || state.mode !== "town" || state.invOpen || overlayVisible("helpOverlay") || !MD.dialogue) return false;
+    if (paused || state.mode !== "town" || state.invOpen || overlayVisible("routeOverlay") || overlayVisible("helpOverlay") || !MD.dialogue) return false;
     const scene = window.MDTownContent.get(name);
     if (!scene) return false;
     return MD.dialogue.open(scene, { trigger, context: { npc: name } });
@@ -1987,13 +2031,17 @@
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         const action = btn.dataset.action;
-        if (action === "enter") { enterDungeon(); return; }
+        if (action === "enter") { openRoute(btn); return; }
         if (action === "warehouse") { openTownDialogue("DeepSeek", btn); return; }
         if (action === "npc") openTownDialogue(btn.dataset.npc, btn);
       });
     });
     const bagButton = document.getElementById("btnTownBag");
     if (bagButton) bagButton.onclick = openInv;
+    const routeButton = document.getElementById("btnTownRoute");
+    if (routeButton) routeButton.onclick = () => openRoute(routeButton);
+    const routeClose = document.getElementById("btnRouteClose");
+    if (routeClose) routeClose.onclick = closeRoute;
   }
   initTownMap();
   document.getElementById("btnWhClose").onclick = () => closeWarehouse();
@@ -2015,6 +2063,7 @@
     el.classList.toggle("collapsed");
     const btn = document.getElementById("btnLogToggle");
     if (btn) btn.textContent = el.classList.contains("collapsed") ? "展开" : "收起";
+    restoreGameFocus(btn);
   };
   document.getElementById("btnEndOk").onclick = () => finishEnd();
 
@@ -2057,6 +2106,17 @@
       select.value = MD.dungeonId;
       select.disabled = state.mode !== "town";
     }
+    const routeChoices = document.getElementById("routeChoices");
+    if (routeChoices) for (const button of routeChoices.children) {
+      const selected = button.dataset.dungeon === MD.dungeonId;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+      button.disabled = state.mode !== "town";
+    }
+    const routeName = document.getElementById("routeName");
+    if (routeName) routeName.textContent = name;
+    const routeDescription = document.getElementById("routeDescription");
+    if (routeDescription) routeDescription.textContent = MD.t("dungeon.current", { name, floors: dungeon.totalFloors });
     const bar = document.getElementById("barBelly");
     if (bar) bar.classList.toggle("low", !!state.player && state.player.belly <= floorRules().hungerWarning);
   }
@@ -2064,19 +2124,31 @@
   function initDungeonSelector() {
     const select = document.getElementById("dungeonSelect");
     if (!select) return;
+    const choices = document.getElementById("routeChoices");
+    function choose(id) {
+      if (state.mode !== "town") { select.value = state.dungeonId; return; }
+      MD.selectDungeon(id);
+      state.dungeonId = MD.dungeonId;
+      if (DEBUG) mountDebugPanel();
+      updateUI();
+    }
     for (const [id, dungeon] of Object.entries(MD.config.dungeons)) {
       const option = document.createElement("option");
       option.value = id;
       option.textContent = MD.t("dungeon.current", { name: MD.t(dungeon.nameKey), floors: dungeon.totalFloors });
       select.appendChild(option);
+      if (choices) {
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "route-option"; button.dataset.dungeon = id;
+        const name = document.createElement("span"); name.className = "route-option-name"; name.textContent = MD.t(dungeon.nameKey);
+        const floors = document.createElement("span"); floors.className = "route-option-floors"; floors.textContent = dungeon.totalFloors + "F";
+        button.appendChild(name); button.appendChild(floors);
+        button.onclick = () => choose(id); choices.appendChild(button);
+      }
     }
     select.value = MD.dungeonId;
     select.addEventListener("change", function () {
-      if (state.mode !== "town") { select.value = state.dungeonId; return; }
-      MD.selectDungeon(select.value);
-      state.dungeonId = MD.dungeonId;
-      if (DEBUG) mountDebugPanel();
-      updateUI();
+      choose(select.value);
     });
     document.getElementById("dungeonChooseLabel").textContent = MD.t("dungeon.choose");
     document.getElementById("dungeonChoiceHint").textContent = MD.t("dungeon.choiceHint");
@@ -2160,6 +2232,7 @@
     syncModalState();
     const target = overlayVisible("helpOverlay") ? document.getElementById("btnHelpClose")
       : overlayVisible("endOverlay") ? document.getElementById("btnEndOk")
+      : overlayVisible("routeOverlay") ? document.getElementById("btnRouteClose")
       : state.invOpen ? document.getElementById("btnInvClose")
       : state.mode === "town" ? document.getElementById("stickerChatgpt") : canvas;
     if (target) target.focus();
@@ -2196,7 +2269,7 @@
     state.invOpen = false; state.whOpen = false;
     document.getElementById("hudInv").classList.add("collapsed");
     document.getElementById("hudWh").classList.add("collapsed");
-    hideOverlay("helpOverlay"); hideOverlay("endOverlay");
+    hideOverlay("helpOverlay"); hideOverlay("endOverlay"); hideOverlay("routeOverlay");
     if (state.mode === "town") showOverlay("townOverlay"); else hideOverlay("townOverlay");
     if (state.endKind) {
       document.getElementById("endTitle").textContent = state.endKind === "clear" ? "走出了迷宫" : "倒下了";

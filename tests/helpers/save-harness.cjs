@@ -12,13 +12,17 @@ function element(id = '') {
   const listeners = {};
   const node = { id, tagName: 'DIV', style: { setProperty() {}, removeProperty() {} }, dataset: {}, children: [], listeners,
     value: '', checked: false, disabled: false, textContent: '', hidden: false, parentElement: { clientWidth: 800, clientHeight: 600 },
-    appendChild(child) { this.children.push(child); return child; },
+    appendChild(child) {
+      if (child.parentElement && child.parentElement.children) child.parentElement.children = child.parentElement.children.filter(node => node !== child);
+      child.parentElement = this; child.ownerDocument = this.ownerDocument; this.children.push(child); return child;
+    },
     append(...children) { this.children.push(...children); },
     replaceChildren(...children) { this.children = children; },
     addEventListener(event, fn) { (listeners[event] ||= []).push(fn); },
     removeEventListener(event, fn) { listeners[event] = (listeners[event] || []).filter(entry => entry !== fn); },
     removeAttribute(name) { delete this[name]; }, setAttribute(name, value) { this[name] = String(value); },
-    focus() {}, remove() {}, click() { if (!this.disabled) { if (this.onclick) this.onclick(); this.dispatch('click'); } },
+    focus() { if (this.ownerDocument && !this.inert) this.ownerDocument.activeElement = this; }, remove() {},
+    click() { if (!this.disabled && !this.inert) { if (this.tagName === 'BUTTON') this.focus(); if (this.onclick) this.onclick(); this.dispatch('click'); } },
     dispatch(event, data = {}) { for (const fn of listeners[event] || []) fn({ preventDefault() {}, stopPropagation() {}, target: this, ...data }); },
     querySelectorAll() { return []; }, querySelector() { return element(); },
     getBoundingClientRect() { return { left: 0, top: 0, width: 40, height: 40 }; }, getContext() { return {}; },
@@ -32,12 +36,23 @@ function element(id = '') {
 async function createHarness(options = {}) {
   const elements = new Map(), created = [], storage = options.storage || new Map(), accesses = [], windowEvents = {}, timers = new Map(), frames = new Map();
   let timerId = 0, frameId = 0;
-  const get = id => { const mounted = created.findLast(node => node.id === id); if (mounted) return mounted; if (!elements.has(id)) elements.set(id, element(id)); return elements.get(id); };
+  const get = id => {
+    const mounted = created.findLast(node => node.id === id); if (mounted) return mounted;
+    if (!elements.has(id)) {
+      const node = element(id); node.ownerDocument = document;
+      if (/^(btn|sticker|menu)/.test(id)) node.tagName = 'BUTTON';
+      if (id === 'game') node.tagName = 'CANVAS';
+      elements.set(id, node);
+      if (['hudInv', 'hudSkills', 'game'].includes(id)) get('boardWrap').appendChild(node);
+    }
+    return elements.get(id);
+  };
   const document = { body: element('body'), documentElement: element('html'), hidden: false,
-    getElementById: get, createElement: tag => { const node = Object.assign(element(), { tagName: tag.toUpperCase() }); created.push(node); return node; },
+    getElementById: get, createElement: tag => { const node = Object.assign(element(), { tagName: tag.toUpperCase(), ownerDocument: document }); created.push(node); return node; },
     querySelectorAll: () => [], querySelector: () => null,
     addEventListener(event, fn) { (windowEvents['document:' + event] ||= []).push(fn); }, removeEventListener() {},
   };
+  document.body.ownerDocument = document; document.activeElement = document.body;
   const localStorage = {
     getItem(key) { accesses.push(['get', key]); if (options.denyStorage) throw new Error('Storage denied'); return storage.get(key) ?? null; },
     setItem(key, value) { accesses.push(['set', key]); if (options.denyStorage) throw new Error('Storage denied'); storage.set(key, String(value)); },
@@ -62,7 +77,7 @@ async function createHarness(options = {}) {
   if (options.beforeGame) await options.beforeGame(context, load);
   for (const file of ['js/themes.js', 'js/map.js', 'js/fov.js', 'js/items.js', 'js/actors.js', 'js/ui.js', 'js/game.js']) load(file);
   const h = { context, MD: context.MD, state: context.MD_STATE, get, storage, accesses, timers, frames, load,
-    key(key, extra = {}) { for (const fn of windowEvents.keydown || []) fn({ key, code: key, target: null, preventDefault() {}, ...extra }); },
+    key(key, extra = {}) { for (const fn of windowEvents.keydown || []) fn({ key, code: key, target: document.activeElement, preventDefault() {}, ...extra }); },
     emit(event, data = {}) { for (const fn of windowEvents[event] || []) fn(data); },
     async flushTimers(limit = 100) { let count = 0; while (timers.size) { if (++count > limit) throw new Error('Timers did not settle'); const current = [...timers.entries()]; for (const [id, fn] of current) { if (!timers.delete(id)) continue; await fn(); } await Promise.resolve(); } },
   };

@@ -37,6 +37,93 @@ test('managed startup is paused and keyboard cannot start a hidden journey', asy
   assert.equal(h.state.mode, 'town'); assert.equal(h.state.player, null);
 });
 
+test('closing dungeon bag and help restores playable focus for the very next key', async () => {
+  const h = await game(); begin(h); h.state.enemies = [];
+  for (const [open, close] of [['btnInv', 'btnInvClose'], ['btnHelp', 'btnHelpClose']]) {
+    for (let repetition = 0; repetition < 3; repetition++) {
+      h.get(open).click();
+      assert.equal(h.context.document.activeElement.id, close);
+      h.get(close).click();
+      assert.equal(h.context.document.activeElement.id, 'game');
+      const before = h.state.turn;
+      h.key(' ');
+      assert.equal(h.state.turn, before + 1, open + ' must not swallow the next wait');
+    }
+  }
+  h.get('btnInv').click(); h.key('Escape');
+  assert.equal(h.context.document.activeElement.id, 'game');
+  h.get('btnHelp').click(); h.key('Escape');
+  assert.equal(h.context.document.activeElement.id, 'game');
+});
+
+test('town loadout shares the accessible body layer with the bag and restores board ownership', async () => {
+  const h = await game(); h.MD.session.fresh(); h.MD.session.resume();
+  const body = h.context.document.body;
+  assert.equal(h.get('hudSkills').parentElement, body);
+  assert.equal(h.get('hudSkills').inert, false);
+  h.state.bag[0] = h.MD.makeItem('rock');
+  h.get('btnTownBag').click();
+  assert.equal(h.get('hudInv').parentElement, body);
+  assert.equal(h.get('hudSkills').inert, false);
+  assert.equal(h.get('townOverlay').inert, true);
+  const active = h.get('skillActive0');
+  active.dispatch('drop', { dataTransfer: { getData: () => '0' } });
+  assert.equal(h.state.skills.active[0].type, 'rock');
+  assert.equal(h.state.bag[0], null);
+  h.get('btnInvClose').click();
+  assert.equal(h.context.document.activeElement.id, 'btnTownBag');
+  h.get('btnHelpTown').click(); assert.equal(h.get('hudSkills').inert, true);
+  h.get('btnHelpClose').click(); assert.equal(h.get('hudSkills').inert, false);
+  h.get('btnNewRun').click();
+  assert.notEqual(h.get('hudSkills').parentElement, body);
+  assert.equal(body.classList.contains('town-active'), false);
+});
+
+test('route panel dismisses without departing, blocks town tools and selects only configured routes', async () => {
+  const h = await game(); h.MD.session.fresh(); h.MD.session.resume();
+  h.get('btnTownRoute').click();
+  assert.equal(h.state.mode, 'town'); assert.equal(h.get('routeOverlay').classList.contains('hidden'), false);
+  assert.equal(h.get('townOverlay').inert, true); assert.equal(h.get('hudSkills').inert, true);
+  h.key('i'); assert.equal(h.state.invOpen, false);
+  h.key('Escape');
+  assert.equal(h.get('routeOverlay').classList.contains('hidden'), true);
+  assert.equal(h.context.document.activeElement.id, 'btnTownRoute');
+  h.get('btnTownRoute').click();
+  const choice = h.get('routeChoices').children.find(button => button.dataset.dungeon === 'trainingGrove');
+  choice.click(); assert.equal(h.state.dungeonId, 'trainingGrove'); assert.equal(choice['aria-pressed'], 'true');
+  h.get('btnNewRun').click();
+  assert.equal(h.state.mode, 'dungeon'); assert.equal(h.get('routeOverlay').classList.contains('hidden'), true);
+  assert.equal(h.context.document.activeElement.id, 'game');
+  const before = h.state.turn; h.key(' '); assert.equal(h.state.turn, before + 1);
+});
+
+test('natural defeat returns town focus, warehouse dismissal and the next expedition to usable controls', async () => {
+  const h = await game({ query:'?flat=1' }); begin(h);
+  assert.equal(typeof h.MD.debugFloor, 'undefined');
+  const { hungerEvery, starvationDamage } = h.state.floorConfig.rules;
+  const limit = h.state.player.belly * hungerEvery + Math.ceil(h.state.player.maxHp / starvationDamage) + 1;
+  for (let waits = 0; !h.state.endKind && waits < limit; waits++) {
+    h.key(' '); await h.flushTimers();
+  }
+  assert.equal(h.state.endKind, 'death');
+  assert.equal(h.context.document.activeElement.id, 'btnEndOk');
+  h.get('btnEndOk').click();
+  assert.equal(h.state.mode, 'town'); assert.equal(h.state.endKind, null);
+  assert.equal(h.context.document.activeElement.id, 'stickerChatgpt');
+  h.get('btnTownBag').click(); h.get('btnWhToggle').click(); h.get('btnWhClose').click();
+  assert.equal(h.state.whOpen, false);
+  assert.equal(h.context.document.activeElement.id, 'btnWhToggle');
+  h.key('Escape'); assert.equal(h.context.document.activeElement.id, 'btnTownBag');
+  h.get('btnNewRun').click();
+  assert.equal(h.context.document.activeElement.id, 'game');
+  for (let repetition = 0; repetition < 2; repetition++) {
+    h.get('btnLogToggle').click();
+    assert.equal(h.context.document.activeElement.id, 'game');
+    const before = h.state.turn; h.key(' '); await h.flushTimers();
+    assert.equal(h.state.turn, before + 1);
+  }
+});
+
 for (const dungeon of ['original', 'trainingGrove']) {
   test(`full ${dungeon} snapshot export/import restores state and the following RNG sequence`, async () => {
     const first = await game(); begin(first, dungeon);

@@ -32,10 +32,10 @@ Desktop.ini
 
 # Generated exclusively from the six domain workbooks
 /config/game.json
-/node_modules/
+/node_modules
 /dist/
 /.dist-staging/
 /test-results/
-/.tools/
+/.tools
 
 /config/*.inspect.ndjson

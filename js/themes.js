@@ -1,7 +1,7 @@
 /* Dungeon floor themes: dungeon floor bands choose the environment.
    Each theme drives: fog/sky color + fog density, hemisphere light,
-   floor+wall textures (runtime PNG with procedural fallback palette),
-   vertex tint palette, wall-corner decoration pool and ambient FX layers.
+   theme-specific terrain volumes, quiet material grain,
+   vertex tint palette and ambient FX layers.
    FX layer: { colors, count, size, fall (+down / -up), sway, spread,
    height, opacity, additive } */
 (function (global) {
@@ -123,20 +123,19 @@
     },
     {
       id: "cyber", name: "赛博朋克",
-      fog: 0x201c38, fogDensity: 0.045,
-      hemiSky: 0x8888ff, hemiGround: 0x302858,
-      lightColor: 0xc090ff,
+      fog: 0x655889, fogDensity: 0.030,
+      hemiSky: 0xd9ceff, hemiGround: 0x7389ab,
+      lightColor: 0xd9c4ff,
       phong: { specular: 0x8868c8, shininess: 26 },
       floorTex: "tex/cyber-floor", wallTex: "tex/cyber-wall",
       floorTexB: "tex/cyber-floor-b", wallTexB: "tex/cyber-wall-b",
       palFloor: [72, 80, 120], palWall: [56, 48, 96],
       tints: {
-        floorRoomVis: 0x8a92d0, floorCorrVis: 0x7078b0,
+        floorRoomVis: 0xe4e9ff, floorCorrVis: 0xcbd9f2,
         floorRoomMem: 0x181629, floorCorrMem: 0x131123,
-        wallVis: 0x7a6ab8, wallMem: 0x111020,
+        wallVis: 0xe0d5ff, wallMem: 0x111020,
       },
       deco: ["crystal", "lantern", "crystal"],
-      edge: { colors: [0xff4fd8, 0x40e0ff], width: 0.11 },
       fx: [
         { colors: [0xff4fd8, 0x40e0ff, 0x9fe8ff], count: 90, size: 0.06, fall: 3.2, sway: 0, spread: 16, height: 7, opacity: 0.8, additive: true },
         { colors: [0xff4fd8, 0x40e0ff], count: 22, size: 0.05, fall: -0.25, sway: 0.6, spread: 16, height: 4.5, opacity: 0.6, additive: true },
@@ -156,39 +155,36 @@
         wallVis: 0xe8f2ff, wallMem: 0x232933,
       },
       deco: ["crystal", "lantern", "crystal", "flower"],
-      edge: { colors: [0x9fdcff, 0xd8f0ff], width: 0.1 },
       fx: [
         { colors: [0x9fe8ff, 0xffffff], count: 70, size: 0.05, fall: -0.14, sway: 0.5, spread: 16, height: 6, opacity: 0.65, additive: true },
       ],
     },
   ];
 
-  // Visual-only paper palette shared by the diorama and lightweight 2D mode.
-  // It never participates in the map seed, collision, spawn or turn rules.
-  const PAPER = {
-    cave:    { rim: 0xfff0d6, ink: 0x62576b, accent: 0xb29abd, fleck: 0xe7d0a1, shape: "spark" },
-    forest:  { rim: 0xf1efcc, ink: 0x3e644b, accent: 0x93ad66, fleck: 0xe6d39a, shape: "leaf" },
-    wetcave: { rim: 0xe1f2f2, ink: 0x476575, accent: 0x9ac9d8, fleck: 0xc2dae3, shape: "rain" },
-    ruins:   { rim: 0xffedcd, ink: 0x7a624d, accent: 0xccaa6b, fleck: 0xe5c998, shape: "spark" },
-    wooden:  { rim: 0xfbe6bd, ink: 0x735238, accent: 0xbb8957, fleck: 0xe8c78c, shape: "mote" },
-    modern:  { rim: 0xf7f3e9, ink: 0x687381, accent: 0xa9bccc, fleck: 0xd7dfe5, shape: "mote" },
-    cyber:   { rim: 0xb4b2e1, ink: 0x27233f, accent: 0xc275bc, fleck: 0x91b4d2, shape: "rain" },
-    future:  { rim: 0xf5fbff, ink: 0x627e9b, accent: 0x97cbdc, fleck: 0xceecf4, shape: "spark" },
+  // Visual-only environment specifications. None of these fields enter map generation,
+  // movement, collision or the gameplay RNG. Structure is expressed in world units.
+  const ENVIRONMENTS = {
+    cave:    { form: "strata", height: 0.86, relief: 0.30, inset: 0.14, floorRelief: 0.040, stone: 0x9c89bd, secondary: 0xc8a6cf, accent: 0x52bfd0, ground: 0xe1c59d, detail: 0xefb65f, shape: "mote" },
+    forest:  { form: "rootbank", height: 0.38, relief: 0.18, inset: 0.22, floorRelief: 0.045, stone: 0x91a65b, secondary: 0xa26e48, accent: 0x69b768, ground: 0xc5d58c, detail: 0xa4d975, shape: "leaf" },
+    wetcave: { form: "karst", height: 0.64, relief: 0.23, inset: 0.18, floorRelief: 0.030, stone: 0x6596b2, secondary: 0x9dc7cb, accent: 0x49bec1, ground: 0xa9cfd0, detail: 0xb49cda, shape: "rain" },
+    ruins:   { form: "broken-masonry", height: 0.39, relief: 0.16, inset: 0.07, floorRelief: 0.020, stone: 0xcfa56e, secondary: 0xe9c18c, accent: 0x6dac91, ground: 0xe6ceaa, detail: 0xc88159, shape: "mote" },
+    wooden:  { form: "timber-bays", height: 0.83, relief: 0, inset: 0.07, floorRelief: 0.012, stone: 0xce9865, secondary: 0x895740, accent: 0xe9b66f, ground: 0xe6c392, detail: 0x6baba1, shape: "mote" },
+    modern:  { form: "service-bays", height: 0.62, relief: 0, inset: 0.07, floorRelief: 0.006, stone: 0x91bdcf, secondary: 0x587f9c, accent: 0xefb35c, ground: 0xc5d9df, detail: 0x76c3c0, shape: "mote" },
+    cyber:   { form: "utility-stacks", height: 0.43, relief: 0, inset: 0.10, floorRelief: 0.008, stone: 0x786fa5, secondary: 0x586b98, accent: 0x57d0d3, ground: 0x909abb, detail: 0xe47abe, shape: "rain" },
+    future:  { form: "pressure-shells", height: 0.32, relief: 0, inset: 0.15, floorRelief: 0.005, stone: 0xbadbdc, secondary: 0x70a4be, accent: 0x69cbc1, ground: 0xcbdfe0, detail: 0xf0b16d, shape: "mote" },
   };
   for (const theme of THEMES) {
-    theme.paper = PAPER[theme.id];
+    theme.environment = ENVIRONMENTS[theme.id];
     for (const layer of theme.fx) {
-      layer.shape = layer.size >= 0.4 ? "mote" : theme.paper.shape;
-      // Air should frame the stickers, rather than cover small targets.
-      layer.count = Math.min(layer.count, theme.id === "forest" ? 42 : 36);
-      if (layer.shape === "leaf") layer.size = 0.105;
-      if (layer.shape === "rain") layer.size = 0.095;
+      layer.shape = layer.size >= 0.4 ? "mote" : theme.environment.shape;
+      layer.count = Math.min(layer.count, theme.id === "forest" ? 32 : 24);
+      if (layer.shape === "leaf") layer.size = 0.075;
+      if (layer.shape === "rain") layer.size = 0.065;
+      layer.opacity = Math.min(layer.opacity, 0.42);
     }
   }
-  // A damp paper wash, without a plastic specular flash on each floor tile.
   THEMES.find(theme => theme.id === "wetcave").phong = { specular: 0x395664, shininess: 16 };
 
-  function paperStyle(theme) { return (theme && theme.paper) || PAPER.cave; }
   function cssColor(hex) { return "#" + hex.toString(16).padStart(6, "0"); }
   function tileHash(x, y) {
     let n = Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263);
@@ -203,66 +199,35 @@
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = size;
     const ctx = canvas.getContext("2d");
-    const style = paperStyle(theme);
-    const palette = wall ? theme.palWall : theme.palFloor;
-    const factor = wall ? 0.73 : room ? 0.88 : 0.77;
-    ctx.fillStyle = "rgb(" + palette.map(v => Math.round(v * factor)).join(",") + ")";
+    const env = theme.environment || ENVIRONMENTS.cave;
+    ctx.fillStyle = cssColor(wall ? env.stone : env.ground);
     ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = cssColor(style.rim);
-    ctx.globalAlpha = wall ? 0.17 : 0.12;
-    ctx.fillRect(1, 1, size - 2, wall ? size * 0.57 : size - 2);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = cssColor(style.ink);
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = wall ? 0.30 : 0.13;
-    ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
-    if (wall) {
-      const seam = Math.round(size * (0.52 + variant * 0.045));
-      ctx.beginPath(); ctx.moveTo(1, seam); ctx.lineTo(size - 1, seam + 1); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(size * (variant % 2 ? 0.35 : 0.69), seam); ctx.lineTo(size * 0.5, size - 1); ctx.stroke();
-    }
-    // Tiny deterministic fibres, not a moving noise pass or a full-size image.
-    for (let i = 0; i < 5; i++) {
-      ctx.globalAlpha = wall ? 0.16 : 0.12;
-      ctx.fillStyle = cssColor(i % 2 ? style.ink : style.rim);
-      const fx = 2 + tileHash(i, variant + 31) * (size - 5);
-      const fy = 2 + tileHash(variant + 41, i) * (size - 5);
-      ctx.fillRect(fx, fy, i % 2 ? 2 : 1, 1);
+    // Low-contrast material masses rather than tile borders or bright wall traces.
+    ctx.fillStyle = cssColor(wall ? env.secondary : env.accent);
+    ctx.globalAlpha = wall ? 0.24 : room ? 0.12 : 0.08;
+    for (let i = 0; i < 4; i++) {
+      const a = tileHash(i + 11, variant + 31);
+      const b = tileHash(variant + 41, i + 19);
+      if (env.form === "timber-bays") ctx.fillRect(0, i * size / 4 + variant, size, size * 0.13);
+      else if (env.relief === 0) ctx.fillRect(a * size * 0.5, b * size * 0.5, size * 0.48, size * 0.37);
+      else { ctx.beginPath(); ctx.ellipse(a * size, b * size, size * 0.29, size * 0.2, a, 0, Math.PI * 2); ctx.fill(); }
     }
     ctx.globalAlpha = 1;
-    // The normal renderer uses only 28px; keep this helper bounded for other callers.
+    if (wall) { ctx.fillStyle = "rgba(18,24,29,0.24)"; ctx.fillRect(0, size * 0.72, size, size * 0.28); }
     if (tileCache.size >= 256) tileCache.clear();
     tileCache.set(key, canvas);
     return canvas;
   }
-
-  function drawPaperTile(ctx, theme, tile) {
+  function drawTerrainTile(ctx, theme, tile) {
     theme = theme || THEMES[0];
-    const { map, x, y, px, py, size, wall, inVis, room } = tile;
-    const style = paperStyle(theme);
-    const variant = Math.floor(tileHash(x, y) * 4);
+    const { x, y, px, py, size, wall, inVis, room } = tile;
     ctx.save();
-    ctx.drawImage(flatTile(theme, wall, room, variant, size), px, py, size, size);
-    if (wall) {
-      // Highlight only the cut edge facing a traversable tile; continuous walls
-      // remain one mass and do not become a checkerboard of collectible stickers.
-      const open = (dx, dy) => x + dx >= 0 && y + dy >= 0 && x + dx < map.width && y + dy < map.height && map.tiles[y + dy][x + dx] !== MD.TILE.WALL;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = cssColor(style.rim);
-      ctx.beginPath();
-      if (open(0, -1)) { ctx.moveTo(px, py + 1); ctx.lineTo(px + size, py + 1); }
-      if (open(1, 0)) { ctx.moveTo(px + size - 1, py); ctx.lineTo(px + size - 1, py + size); }
-      if (open(0, 1)) { ctx.moveTo(px, py + size - 1); ctx.lineTo(px + size, py + size - 1); }
-      if (open(-1, 0)) { ctx.moveTo(px + 1, py); ctx.lineTo(px + 1, py + size); }
-      ctx.stroke();
-    }
-    if (!inVis) {
-      ctx.fillStyle = "rgba(12,17,26,0.76)";
-      ctx.fillRect(px, py, size, size);
-    }
+    ctx.drawImage(flatTile(theme, wall, room, Math.floor(tileHash(x, y) * 4), size), px, py, size, size);
+    if (!inVis) { ctx.fillStyle = "rgba(12,17,26,0.76)"; ctx.fillRect(px, py, size, size); }
     ctx.restore();
   }
-  MD.paperTerrain = { style: paperStyle, drawTile: drawPaperTile };
+  // Preserve the established 2D caller contract; environment rendering has no outlines.
+  MD.paperTerrain = { drawTile: drawTerrainTile };
 
   function themeForFloor(floor) {
     const id = MD.floorConfig(floor).themeId;

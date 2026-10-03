@@ -2,13 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>迷宫</title>
-  <link rel="stylesheet" href="css/style.css?v=68" />
+  <link rel="stylesheet" href="css/style.css?v=71" />
   <link rel="stylesheet" href="css/menu.css?v=68" />
   <link rel="stylesheet" href="css/opening.css?v=68" />
   <link rel="stylesheet" href="css/interaction.css?v=69" />
   <link rel="stylesheet" href="css/dialogue.css?v=69" />
+  <link rel="stylesheet" href="css/game-stage.css?v=71" />
 </head>
 <body class="shell-open">
   <section id="loadingScreen" class="loading-screen" aria-live="polite" aria-label="游戏加载">
@@ -19,7 +20,7 @@
     <div class="menu-panel"><div id="menuContent"></div><p id="menuNotice" class="menu-notice" role="status" aria-live="polite"></p></div>
   </section>
   <input id="saveFileInput" type="file" accept="application/json,.json" hidden>
-  <div class="session-controls"><span id="saveStatus" role="status" aria-live="polite"></span><button id="btnSessionMenu" type="button" hidden>菜单 / 存档</button></div>
+  <div class="session-controls" aria-label="旅程菜单"><span id="saveStatus" role="status" aria-live="polite"></span><button id="btnSessionMenu" type="button" hidden><span aria-hidden="true">☷</span> 旅程</button></div>
   <div class="app">
     <div class="board-wrap">
       <canvas id="game" width="960" height="640" tabindex="0" aria-label="迷宫游戏区域"></canvas>
@@ -100,69 +101,76 @@
     </div>
   </div>
 
-  <!-- Town map (pre-dungeon hub). Scene artwork and stickers share one aspect-ratio canvas. -->
+  <!-- Town hub: full-bleed scenic art, anchored residents, and in-world tools. -->
   <div class="overlay town-overlay" id="townOverlay">
     <div class="town-map" id="townMap">
-      <header class="town-heading">
-        <div class="town-heading-copy"><span class="town-eyebrow">MYSTERY DUNGEON</span><h1>旅人小镇</h1><p>歇一会儿，再出发。<span>白边贴纸都可以点</span></p></div>
-        <div class="town-tools">
-          <button type="button" class="town-tool" id="btnTownBag" aria-label="打开背包" title="背包 · I"><span aria-hidden="true">▤</span>背包</button>
-          <button type="button" class="town-tool town-help" id="btnHelpTown" aria-label="操作说明" title="操作说明"><span aria-hidden="true">?</span>帮助</button>
-        </div>
-      </header>
+      <div class="town-banner" aria-label="旅人小镇，安全区域"><small>归途驿站</small><h1>旅人小镇</h1><span>歇一会儿，再出发</span></div>
+      <div class="town-toolbelt" aria-label="小镇工具">
+        <button type="button" class="town-tool town-tool-bag" id="btnTownBag" aria-label="打开背包" title="背包 · I"><img src="assets/runtime/ui/game-stage/bag-sticker.svg" alt=""><span>行囊<kbd>I</kbd></span></button>
+        <button type="button" class="town-tool town-tool-help" id="btnHelpTown" aria-label="操作说明" title="操作说明"><img src="assets/runtime/ui/game-stage/guide-sticker.svg" alt=""><span>手册</span></button>
+      </div>
       <div class="town-scene" role="group" aria-label="小镇居民与迷宫入口">
         <picture class="town-scenery" aria-hidden="true">
-          <source media="(max-width: 680px)" srcset="assets/runtime/ui/town/paper-town-narrow.svg">
-          <img class="town-map-bg" src="assets/runtime/ui/town/paper-town-wide.svg" alt="" draggable="false">
+          <img class="town-map-bg" src="assets/runtime/ui/game-stage/town-stage-16x10.png" alt="" draggable="false">
         </picture>
-        <div class="town-map-note" aria-hidden="true"><span>旅途的起点</span><small>Take a little rest.</small></div>
-        <button type="button" class="town-sticker town-sticker-entrance" id="stickerEntrance" data-action="enter" title="迷宫入口 · 出发" aria-label="迷宫入口，进入所选迷宫">
+        <button type="button" class="town-sticker town-sticker-entrance" id="stickerEntrance" data-action="enter" title="迷宫入口 · 出发" aria-label="迷宫入口，查看冒险路线">
           <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/entrance-idle.png?v=59" alt="" draggable="false"></span>
-          <span class="town-label">迷宫入口<small>准备好了就出发</small></span>
+          <span class="town-label">迷宫入口<small>选择冒险路线</small></span>
         </button>
         <button type="button" class="town-sticker" id="stickerChatgpt" data-action="npc" data-npc="ChatGPT" title="ChatGPT · 旅路向导" aria-label="与旅路向导 ChatGPT 交谈">
-          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/chatgpt-idle.png?v=59" alt="" draggable="false"><img class="hov" src="assets/runtime/ui/town/chatgpt-hover.png?v=59" alt="" draggable="false"></span>
+          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/chatgpt-idle.png?v=59" alt="" draggable="false"></span>
           <span class="town-label">ChatGPT<small>旅路向导</small></span>
         </button>
         <button type="button" class="town-sticker" id="stickerClaude" data-action="npc" data-npc="Claude" title="Claude · 灯下记录员" aria-label="与灯下记录员 Claude 交谈">
-          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/claude-idle.png?v=59" alt="" draggable="false"><img class="hov" src="assets/runtime/ui/town/claude-hover.png?v=59" alt="" draggable="false"></span>
+          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/claude-idle.png?v=59" alt="" draggable="false"></span>
           <span class="town-label">Claude<small>灯下记录员</small></span>
         </button>
         <button type="button" class="town-sticker" id="stickerKimi" data-action="npc" data-npc="Kimi" title="Kimi · 巡路信使" aria-label="与巡路信使 Kimi 交谈">
-          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/kimi-idle.png?v=59" alt="" draggable="false"><img class="hov" src="assets/runtime/ui/town/kimi-hover.png?v=59" alt="" draggable="false"></span>
+          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/kimi-idle.png?v=59" alt="" draggable="false"></span>
           <span class="town-label">Kimi<small>巡路信使</small></span>
         </button>
         <button type="button" class="town-sticker" id="stickerGlm" data-action="npc" data-npc="GLM" title="GLM · 工坊看守" aria-label="与工坊看守 GLM 交谈">
-          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/glm-idle.png?v=59" alt="" draggable="false"><img class="hov" src="assets/runtime/ui/town/glm-hover.png?v=59" alt="" draggable="false"></span>
+          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/glm-idle.png?v=59" alt="" draggable="false"></span>
           <span class="town-label">GLM<small>工坊看守</small></span>
         </button>
         <button type="button" class="town-sticker" id="stickerHarness" data-action="npc" data-npc="DeepSeek Harness" title="Harness · 出发整备员" aria-label="与出发整备员 Harness 交谈">
-          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/harness-idle.png?v=59" alt="" draggable="false"><img class="hov" src="assets/runtime/ui/town/harness-hover.png?v=59" alt="" draggable="false"></span>
+          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/harness-idle.png?v=59" alt="" draggable="false"></span>
           <span class="town-label">Harness<small>出发整备员</small></span>
         </button>
         <button type="button" class="town-sticker town-sticker-self" id="stickerDeepseek" data-action="warehouse" data-npc="DeepSeek" title="DeepSeek · 仓库管家" aria-label="与仓库管家 DeepSeek 交谈">
-          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/deepseek-idle.png?v=59" alt="" draggable="false"><img class="hov" src="assets/runtime/ui/town/deepseek-hover.png?v=59" alt="" draggable="false"></span>
+          <span class="town-sticker-media"><img class="idle" src="assets/runtime/ui/town/deepseek-idle.png?v=59" alt="" draggable="false"></span>
           <span class="town-label">DeepSeek<small>仓库管家</small></span>
         </button>
       </div>
-      <footer class="town-footer">
-        <div class="town-welcome"><span class="town-welcome-mark" aria-hidden="true">✦</span><div><span class="town-welcome-title">有人在等你回来</span><p class="town-msg-chip" id="townMsg" aria-live="polite">点一位小镇居民聊聊，或整理好行囊再出发。</p></div></div>
-        <section class="dungeon-choice" aria-labelledby="dungeonChooseLabel">
-          <div class="dungeon-choice-field"><label for="dungeonSelect" id="dungeonChooseLabel">下一段旅程</label><select id="dungeonSelect" aria-describedby="dungeonChoiceHint"></select></div>
-          <button type="button" id="btnNewRun">开始新冒险 <span aria-hidden="true">↗</span></button>
-          <p id="dungeonChoiceHint">从第 1 层开始；回镇子后可切换迷宫</p>
-        </section>
-      </footer>
+      <div class="town-message"><span aria-hidden="true">✦</span><p id="townMsg" aria-live="polite">点一位居民聊聊，整理行囊，再踏上旅途。</p></div>
+      <button type="button" class="town-route" id="btnTownRoute"><img src="assets/runtime/ui/game-stage/map-sticker.svg" alt=""><strong>启程</strong><small>查看路线</small></button>
+      <p class="touch-scope-note">小镇可触屏点选 · 迷宫探索需键盘</p>
       <!-- keep legacy ids for keyboard shortcuts -->
       <button type="button" id="btnEnter" hidden>进入迷宫</button>
       <button type="button" id="btnWarehouse" hidden>仓库</button>
     </div>
   </div>
 
+  <!-- The route chart is opened from the gate; it is part of the game stage. -->
+  <div class="overlay route-overlay hidden" id="routeOverlay" role="dialog" aria-modal="true" aria-labelledby="routeTitle">
+    <section class="route-map">
+      <button type="button" class="paper-close" id="btnRouteClose" aria-label="关闭路线图">×</button>
+      <div class="route-heading"><span>下一段旅途</span><h2 id="routeTitle">选择冒险路线</h2><p>每条路，都从第一步开始</p></div>
+      <div id="routeChoices" class="route-choices" role="group" aria-label="迷宫路线"></div>
+      <div class="route-selection">
+        <label for="dungeonSelect" id="dungeonChooseLabel">选择迷宫</label>
+        <select id="dungeonSelect" aria-describedby="dungeonChoiceHint"></select>
+      </div>
+      <p class="route-description" id="routeDescription"></p>
+      <p id="dungeonChoiceHint">从第 1 层开始；回镇子后可切换迷宫</p>
+      <button type="button" class="expedition-button" id="btnNewRun">开始新冒险</button>
+    </section>
+  </div>
+
   <!-- Help -->
   <div class="overlay hidden" id="helpOverlay" role="dialog" aria-modal="true" aria-label="操作说明">
-    <div class="modal">
-      <h2>操作说明</h2>
+    <div class="modal field-guide">
+      <span class="guide-eyebrow">旅人手册 · 随身备忘</span><h2>操作说明</h2>
       <dl class="help-list">
         <dt>移动</dt><dd>方向键 / WASD（四向），小键盘 1–9（八向），同时按两键可斜向</dd>
         <dt>等待</dt><dd>空格 / . / 小键盘 5</dd>
@@ -194,6 +202,6 @@
   </div>
 
   <script src="js/config.js"></script>
-  <script src="js/bootstrap.js?v=69"></script>
+  <script src="js/bootstrap.js?v=70"></script>
 </body>
 </html>

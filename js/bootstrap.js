@@ -49,12 +49,12 @@
     const files = ['js/themes.js', 'js/map.js', 'js/fov.js', 'js/items.js', 'js/actors.js'];
     if (!flat) { files.unshift('vendor/three.min.js'); files.push('js/sprites.js', 'js/view3d.js'); }
     files.push('js/ui.js', 'js/saves.js', 'js/dialogue.js', 'js/town-content.js', 'js/game.js', 'js/opening.js', 'js/menu.js');
-    const images = ['assets/runtime/ui/town/town-map.png', 'assets/runtime/ui/town/deepseek-idle.png', 'assets/runtime/ui/avatar-face.png'];
+    const images = ['assets/runtime/ui/game-stage/town-stage-16x10.png', 'assets/runtime/ui/town/deepseek-idle.png', 'assets/runtime/ui/avatar-face.png'];
     total = 1 + files.length + images.length + (flat ? 0 : 1);
     let optionalFailure = false;
     for (const file of files) {
       stage('点亮小镇', '载入程序 · ' + file);
-      try { await script(file + '?v=69'); } catch (error) {
+      try { await script(file + '?v=70'); } catch (error) {
         if (!['vendor/three.min.js', 'js/sprites.js', 'js/view3d.js'].includes(file)) throw error;
         optionalFailure = true; console.warn(error.message + '，尝试兼容绘制');
       }
