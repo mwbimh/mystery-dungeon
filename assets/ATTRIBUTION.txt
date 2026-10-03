@@ -3,3 +3,6 @@ Characters, items: original chibi sprites generated for this prototype (not Kenn
 Dungeon floor, walls, decorations (crystal/mushroom/lantern/vine/flower/stairs): original art for this prototype.
 
 Opening full-character illustration: supplied project character artwork, used by project-owner request. No CC0 or other new license is asserted for that illustration.
+
+Bright town scenery: original AI-assisted illustration generated for this project in October 2026.
+Game-stage UI SVGs: original vector artwork created for this project; no third-party clip-art or fonts are embedded.

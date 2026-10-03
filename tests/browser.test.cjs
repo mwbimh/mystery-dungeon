@@ -40,9 +40,13 @@ async function readyMenu(page) {
   // Boot may play the OP before loading the game scripts. Skip through the same
   // visible control a player uses; never claim the VM tests cover this path.
   await page.waitForFunction(() => window.MD_STATE && document.getElementById('loadingScreen').hidden);
-  // Atomic setup dismissal avoids natural OP expiry between count() and click().
-  // Dedicated tests below exercise actual keyboard and visible-button input.
-  await page.evaluate(() => document.getElementById('openingSkip')?.click());
+  // Use the visible control, never an in-page click/focus repair. Natural expiry
+  // may remove it between observation and click; only that benign race is allowed.
+  if (await page.locator('#openingSkip').isVisible()) {
+    try { await page.locator('#openingSkip').click({ timeout: 2000 }); }
+    catch (error) { if (await page.locator('#openingScreen').count()) throw error; }
+  }
+  await page.locator('#openingScreen').waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.MD_STATE);
   if (await page.evaluate(() => !!MD.preview)) return;
   await page.waitForFunction(() => window.MDMenu);
@@ -69,6 +73,100 @@ async function menuClick(page, selector) {
   // queued saves, IndexedDB reads and the resulting DOM render are settled.
   await menuIdle(page);
 }
+async function openRoutes(page) {
+  if (!(await page.locator('#routeOverlay').isVisible())) await page.locator('#btnTownRoute').click();
+  await page.locator('#routeOverlay:not(.hidden)').waitFor();
+}
+async function chooseRoute(page, id) {
+  await openRoutes(page);
+  await page.locator('#routeChoices button[data-dungeon="' + id + '"]').click();
+}
+async function depart(page) {
+  await openRoutes(page);
+  await page.locator('#btnNewRun').click();
+  await page.waitForFunction(() => MD_STATE.mode === 'dungeon');
+}
+
+// Native Tab navigation is part of the tested UI, not a direct focus assignment.
+async function tabTo(page, selector) {
+  for (let count = 0; count < 100; count++) {
+    if (await page.locator(selector).evaluate(node => node === document.activeElement)) return;
+    await page.keyboard.press('Tab');
+  }
+  assert.fail(selector + ' is not reachable through native Tab navigation');
+}
+async function assertFixedStage(page, label) {
+  const dimensions = await page.evaluate(() => ({
+    width: innerWidth, height: innerHeight, x: scrollX, y: scrollY,
+    rootWidth: document.documentElement.scrollWidth, rootHeight: document.documentElement.scrollHeight,
+    bodyWidth: document.body.scrollWidth, bodyHeight: document.body.scrollHeight,
+    rootOverflow: getComputedStyle(document.documentElement).overflow,
+    bodyOverflow: getComputedStyle(document.body).overflow,
+  }));
+  assert.equal(dimensions.x, 0, label + ' page scrollX');
+  assert.equal(dimensions.y, 0, label + ' page scrollY');
+  for (const key of ['rootWidth', 'bodyWidth']) assert.ok(dimensions[key] <= dimensions.width + 1, label + ' ' + key);
+  for (const key of ['rootHeight', 'bodyHeight']) assert.ok(dimensions[key] <= dimensions.height + 1, label + ' ' + key);
+  assert.equal(dimensions.rootOverflow, 'hidden', label + ' root owns no scrollbar');
+  assert.equal(dimensions.bodyOverflow, 'hidden', label + ' body owns no scrollbar');
+}
+async function assertInsideViewport(page, selector, label) {
+  const box = await page.locator(selector).boundingBox(), size = page.viewportSize();
+  assert.ok(box && box.width > 0 && box.height > 0, label + ' visible dimensions');
+  assert.ok(box.x >= -1 && box.y >= -1 && box.x + box.width <= size.width + 1 && box.y + box.height <= size.height + 1,
+    label + ' fits viewport: ' + JSON.stringify(box));
+}
+async function assertNormalHudSafe(page, label, checkpoint) {
+  // One browser round trip observes a single completed frame atomically. The
+  // rectangles, visibility, scrolling, and save data all belong to that frame.
+  const actual = await page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const rect = node => {
+      if (!node) return null;
+      const r = node.getBoundingClientRect(), style = getComputedStyle(node);
+      return { x:r.x, y:r.y, width:r.width, height:r.height,
+        visible:r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' };
+    };
+    const selectors = { minimap:'#hudMinimap', session:'.session-controls', vitals:'.hud-vitals', bag:'#btnInv',
+      log:'#hudLog', skills:'#hudSkills' };
+    const boxes = Object.fromEntries(Object.entries(selectors).map(([name, selector]) => [name,rect(document.querySelector(selector))]));
+    const canvas = document.getElementById('minimapCanvas'), status = document.getElementById('saveStatus');
+    return { boxes, width:innerWidth, height:innerHeight, x:scrollX, y:scrollY,
+      rootWidth:document.documentElement.scrollWidth, rootHeight:document.documentElement.scrollHeight,
+      bodyWidth:document.body.scrollWidth, bodyHeight:document.body.scrollHeight,
+      rootOverflow:getComputedStyle(document.documentElement).overflow, bodyOverflow:getComputedStyle(document.body).overflow,
+      canvasReady:!!canvas && canvas.width > 0 && canvas.height > 0,
+      saving:status?.textContent || '', saveVisible:!!rect(status)?.visible,
+      menuVisible:!!rect(document.getElementById('btnSessionMenu'))?.visible, preview:!!MD.preview,
+      snapshot:{ ...MD.session.snapshot(), playTimeMs:0 } };
+  });
+  const { boxes } = actual;
+  for (const [name, box] of Object.entries(boxes)) {
+    assert.ok(box?.visible && box.width > 0 && box.height > 0, label + ' ' + name + ' visible dimensions');
+    assert.ok(box.x >= -1 && box.y >= -1 && box.x + box.width <= actual.width + 1 && box.y + box.height <= actual.height + 1,
+      label + ' ' + name + ' fits viewport: ' + JSON.stringify(box));
+  }
+  for (const [a, b] of [['minimap','session'], ['minimap','vitals'], ['minimap','bag'], ['minimap','log'], ['minimap','skills'],
+    ['session','vitals'], ['session','bag']]) {
+    const first = boxes[a], second = boxes[b];
+    const width = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
+    const height = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
+    assert.ok(width <= 1 || height <= 1, `${label} ${a}/${b} overlap ${width}×${height}: ${JSON.stringify(boxes)}`);
+  }
+  assert.equal(actual.canvasReady, true, label + ' uses the shared real minimap canvas');
+  assert.ok(actual.saving.trim().length > 0, label + ' includes the real normal-mode save status');
+  if (actual.width > 700) assert.equal(actual.saveVisible, true, label + ' desktop save status remains visible');
+  assert.equal(actual.menuVisible, true, label + ' normal journey control remains visible');
+  assert.equal(actual.preview, false, label + ' is not a designer preview');
+  assert.equal(actual.x, 0, label + ' page scrollX');
+  assert.equal(actual.y, 0, label + ' page scrollY');
+  for (const key of ['rootWidth','bodyWidth']) assert.ok(actual[key] <= actual.width + 1, label + ' ' + key);
+  for (const key of ['rootHeight','bodyHeight']) assert.ok(actual[key] <= actual.height + 1, label + ' ' + key);
+  assert.equal(actual.rootOverflow, 'hidden', label + ' root owns no scrollbar');
+  assert.equal(actual.bodyOverflow, 'hidden', label + ' body owns no scrollbar');
+  assert.deepEqual(actual.snapshot, checkpoint, label + ' resize never changes the live journey');
+}
+
 async function savedSnapshot(page) {
   return page.evaluate(() => ({ ...MD.session.snapshot(), playTimeMs: 0 }));
 }
@@ -88,8 +186,10 @@ test('normal startup loads generated workbook defaults', async () => {
   try {
     await loaded(page);
     assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
-    await page.locator('#stickerEntrance').focus();
+    await tabTo(page, '#stickerEntrance');
     await page.keyboard.press('Enter');
+    await page.locator('#routeOverlay:not(.hidden)').waitFor();
+    await depart(page);
     await page.waitForFunction(() => MD_STATE.player);
     const actual = await page.evaluate(() => ({ mode: MD_STATE.mode, hp: MD_STATE.player.hp, configHp: MD.config.player.hp }));
     const defaults = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game.json'), 'utf8'));
@@ -216,18 +316,18 @@ test('Excel localization switches names while independent slot items retain stab
   } finally { await context.close(); }
 });
 
-test('second workbook dungeon selects, persists, renders variant assets and completes at its own floor', async () => {
+test('isolated dungeon fixture selects, persists, renders variants and settles at its configured final floor', async () => {
   const context=await browser.newContext(),page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   try {
     await loaded(page,'?flat=1&debug=1&lang=en');
-    await page.locator('#dungeonSelect').selectOption('trainingGrove');
+    await chooseRoute(page, 'trainingGrove');
     await page.evaluate(() => MDMenu.save(true));
     assert.equal(await page.evaluate(async () => (await MDMenu.store.read(1)).snapshot.dungeonId), 'trainingGrove');
     await page.reload(); await readyMenu(page); await menuClick(page, '#menuContinue');
     await page.waitForFunction(() => !MD.session.isPaused());
     assert.equal(await page.locator('#dungeonSelect').inputValue(),'trainingGrove');
-    await page.locator('#btnNewRun').click();
+    await depart(page);
     await page.waitForFunction(()=>MD_STATE.mode==='dungeon');
     const actual=await page.evaluate(()=>({id:MD.dungeonId,width:MD_STATE.map.width,height:MD_STATE.map.height,enemy:MD_STATE.enemies.map(e=>e.type),items:MD_STATE.items.map(i=>i.type),theme:MD_STATE.theme.id}));
     assert.equal(actual.id,'trainingGrove');assert.equal(actual.width,50);assert.equal(actual.height,30);assert.equal(actual.theme,'forest');
@@ -241,7 +341,7 @@ test('second workbook dungeon selects, persists, renders variant assets and comp
     assert.equal(await page.evaluate(()=>MD_STATE.endKind),'clear');
     await page.locator('#btnEndOk').click();
     assert.equal(await page.evaluate(()=>MD_STATE.mode),'town');
-    await page.locator('#dungeonSelect').selectOption('original');await page.locator('#btnNewRun').click();
+    await chooseRoute(page, 'original');await depart(page);
     assert.deepEqual(await page.evaluate(()=>({dungeon:MD_STATE.dungeonId,floor:MD_STATE.floor,total:MD.config.dungeons[MD.dungeonId].totalFloors,leaked:MD_STATE.enemies.some(e=>e.type==='emberSlime')||MD_STATE.items.some(i=>i.type==='travelOnigiri')})),{dungeon:'original',floor:1,total:24,leaked:false});
     assert.deepEqual(errors,[]);
   } finally {await context.close();}
@@ -290,7 +390,7 @@ test('native IndexedDB resumes both dungeons after reload and keeps slots indepe
   try {
     await loaded(page);
     assert.equal(await page.evaluate(() => MDMenu.store.status.kind), 'indexeddb');
-    await page.locator('#dungeonSelect').selectOption('trainingGrove'); await page.locator('#btnNewRun').click();
+    await chooseRoute(page, 'trainingGrove'); await depart(page);
     await page.keyboard.press('Space');
     await menuClick(page, '#btnSessionMenu');
     const first = await savedSnapshot(page);
@@ -301,7 +401,7 @@ test('native IndexedDB resumes both dungeons after reload and keeps slots indepe
     await page.locator('button[data-slot="2"][data-action="new"]').click();
     await page.waitForFunction(() => MDMenu.activeSlot === 2 && !MD.session.isPaused());
     assert.equal(await page.evaluate(() => MD_STATE.warehouse.length), 0);
-    await page.locator('#btnNewRun').click();
+    await depart(page);
     assert.equal(await page.evaluate(() => MD_STATE.dungeonId), 'original');
     await menuClick(page, '#btnSessionMenu');
     assert.equal(await page.locator('#menuContinue').isEnabled(), true);
@@ -315,7 +415,7 @@ test('download current journey then upload into another slot resumes the complet
   const context = await browser.newContext({ reducedMotion: 'reduce', acceptDownloads: true }), page = await context.newPage();
   try {
     await loaded(page, '?flat=1&debug=1');
-    await page.locator('#dungeonSelect').selectOption('trainingGrove'); await page.locator('#btnNewRun').click();
+    await chooseRoute(page, 'trainingGrove'); await depart(page);
     await page.evaluate(() => { MD.debugFloor(2); MD_STATE.bag[0] = MD.makeItem('knockStaff'); MD_STATE.warehouse.push(MD.makeItem('onigiri')); MD.unlockSkillSlot('active'); });
     await page.keyboard.press('Space'); await menuClick(page, '#btnSessionMenu');
     const expected = await savedSnapshot(page);
@@ -342,7 +442,7 @@ test('download current journey then upload into another slot resumes the complet
 test('wrong files and cancelled overwrite never replace an occupied slot', async () => {
   const context = await browser.newContext({ reducedMotion: 'reduce' }), page = await context.newPage();
   try {
-    await loaded(page); await page.locator('#btnNewRun').click(); await page.keyboard.press('Space');
+    await loaded(page); await depart(page); await page.keyboard.press('Space');
     await menuClick(page, '#btnSessionMenu'); const expected = await savedSnapshot(page);
     await menuClick(page, '#menuLoad');
     for (const [name, buffer] of [['picture.png', Buffer.from([137, 80, 78, 71])], ['bad.json', Buffer.from('{')]]) {
@@ -441,7 +541,7 @@ test('unavailable IndexedDB honestly warns about volatile saving and remains pla
     await loaded(page);
     assert.equal(await page.evaluate(() => MDMenu.store.status.persistent), false);
     assert.match(await page.locator('#saveStatus').textContent(), /仅本次|下载/);
-    await page.locator('#btnNewRun').click(); await page.keyboard.press('Space');
+    await depart(page); await page.keyboard.press('Space');
     await menuClick(page, '#btnSessionMenu');
     assert.equal(await page.getByRole('button', { name: '下载当前进度', exact: true }).isVisible(), true);
     assert.match(await page.locator('.menu-storage-note').textContent(), /刷新或关闭会丢失/);
@@ -452,7 +552,7 @@ test('two live tabs cannot silently overwrite each other and stale progress rema
   const context = await browser.newContext({ reducedMotion: 'reduce' });
   const first = await context.newPage(), second = await context.newPage();
   try {
-    await loaded(first); await first.locator('#btnNewRun').click(); await first.evaluate(() => MDMenu.save(true));
+    await loaded(first); await depart(first); await first.evaluate(() => MDMenu.save(true));
     await loaded(second);
     await first.keyboard.press('Space'); await first.evaluate(() => MDMenu.save(true));
     const latest = await first.evaluate(async () => ({ ...(await MDMenu.store.read(1)).snapshot, playTimeMs: 0 }));
@@ -473,7 +573,7 @@ test('actual default 3D renderer autosaves and reloads without renderer internal
   page.on('pageerror', error => errors.push(error.message));
   try {
     await loaded(page, '?debug=1');
-    await page.locator('#btnNewRun').click();
+    await depart(page);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     // Only view3d.actorId assigns this marker; 2D fallback cannot satisfy this.
     assert.match(await page.evaluate(() => MD_STATE.player._vid || ''), /^a[0-9]+$/);
@@ -501,14 +601,14 @@ test('paper town preserves native keyboard navigation and opens six distinct reu
     await loaded(page);
     fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
     await page.screenshot({ path: path.join(ROOT, 'test-results/paper-town-desktop.png'), animations: 'disabled', fullPage: true });
-    await page.locator('#btnTownBag').focus(); await page.keyboard.press('Tab');
+    await tabTo(page, '#btnTownBag'); await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => MD_STATE.invOpen), false);
     assert.notEqual(await page.evaluate(() => document.activeElement.id), 'btnTownBag');
     const scenes = new Set();
     for (const id of ['stickerChatgpt', 'stickerClaude', 'stickerKimi', 'stickerGlm', 'stickerHarness', 'stickerDeepseek']) {
-      await page.locator('#' + id).focus(); await page.keyboard.press('Enter');
+      await tabTo(page, '#' + id); await page.keyboard.press('Enter');
       await page.locator('.pvn-overlay').waitFor();
-      assert.equal(await page.locator('.pvn-choice').first().evaluate(node => getComputedStyle(node).boxShadow), 'none');
+      assert.equal(await page.locator('.pvn-choice').first().isVisible(), true);
       assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
       assert.equal(await page.evaluate(() => document.querySelector('.pvn-overlay').contains(document.activeElement)), true);
       scenes.add(await page.locator('.pvn-text').textContent());
@@ -561,7 +661,7 @@ test('town inventory keeps its paper background; dialogue action opens warehouse
   } finally { await context.close(); }
 });
 
-test('help and bag modals block all gameplay keys and the first post-drag click works', async () => {
+test('isolated inventory fixture blocks gameplay keys and accepts the first post-drag click', async () => {
   const context = await browser.newContext();
   const page = await context.newPage();
   try {
@@ -569,21 +669,27 @@ test('help and bag modals block all gameplay keys and the first post-drag click 
     await page.evaluate(() => { MD_STATE.enemies = []; MD_STATE.bag[0] = MD.makeItem('rock'); MD_STATE.bag[1] = MD.makeItem('onigiri'); });
     const before = await savedSnapshot(page);
     await page.locator('#btnHelp').click();
-    await page.locator('#helpOverlay').evaluate(node => { node.tabIndex = -1; node.focus(); });
-    for (const key of ['Space', '.', 'g', 'ArrowRight', 'w', 'i', 'Enter']) await page.keyboard.press(key);
+    for (const key of ['.', 'g', 'ArrowRight', 'w', 'i']) await page.keyboard.press(key);
     await page.waitForTimeout(80);
     assert.deepEqual(await savedSnapshot(page), before);
-    await page.keyboard.press('Escape');
-    await page.locator('#game').focus(); await page.keyboard.press('i');
-    await page.locator('#hudInv').evaluate(node => { node.tabIndex = -1; node.focus(); });
-    for (const key of ['Space', '.', 'g', 'ArrowRight', 'w']) await page.keyboard.press(key);
+    // Native Enter on the focused close button dismisses exactly once and
+    // cannot leak a gameplay turn into the newly unblocked board.
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#helpOverlay').isVisible(), false);
     assert.deepEqual(await savedSnapshot(page), before);
+    await page.keyboard.press('i');
+    for (const key of ['.', 'g', 'ArrowRight', 'w']) await page.keyboard.press(key);
+    assert.deepEqual(await savedSnapshot(page), before);
+    await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => MD_STATE.invOpen), false);
+    assert.deepEqual(await savedSnapshot(page), before);
+    await page.keyboard.press('i');
     await page.locator('#invGrid .slot[data-slot="0"]').dragTo(page.locator('#invGrid .slot[data-slot="1"]'));
     assert.equal(await page.evaluate(() => MD_STATE.bag[0].type), 'onigiri');
     await page.locator('#invGrid .slot[data-slot="0"]').click();
     assert.equal(await page.evaluate(() => MD_STATE.invSelected), 0);
     await page.keyboard.press('Escape');
-    await page.locator('#game').focus(); await page.keyboard.press('Space');
+    await page.keyboard.press('Space');
     assert.equal(await page.evaluate(() => MD_STATE.turn), before.turn + 1);
   } finally { await context.close(); }
 });
@@ -636,68 +742,103 @@ test('paper town, inventory and visual novel remain reachable on a narrow touch 
   } finally { await context.close(); }
 });
 
-test('all dungeon paper themes render with an actual WebGL context and unchanged movement rules', async () => {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
-  const page = await context.newPage(), errors = [];
+test('isolated eight-theme previews use real WebGL volumes, distinct landmarks and no scene outlines', { timeout: 180000 }, async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: 'reduce' });
+  const page = await context.newPage(), errors = [], signatures = new Set(), forms = new Set();
   page.on('pageerror', error => errors.push(error.message));
+  const expectedLandmarks = { cave:'crystal-cluster', forest:'leafy-tree', wetcave:'dripstone-grotto', ruins:'broken-column',
+    wooden:'timber-frame', modern:'vent-cabinet', cyber:'neon-stack', future:'pressure-pod' };
+  const generated = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game.json'), 'utf8'));
+  const floors = [...new Map(generated.floorBands.filter(band => band.dungeonId === 'original').map(band => [band.themeId, band.fromFloor])).entries()];
+  assert.equal(floors.length, 8, 'all eight environments must have a configured original-dungeon floor');
+  fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
   try {
-    await loaded(page, '?designer=1&dungeon=original&seed=42&debug=1');
-    assert.equal(await page.evaluate(() => !!document.getElementById('game').getContext('webgl2')), true);
-    const floors = await page.evaluate(() => {
-      const seen = new Set(), result = [];
-      for (let floor = 1; floor <= MD.config.dungeons.original.totalFloors; floor++) {
-        const id = MD.floorConfig(floor).themeId;
-        if (!seen.has(id)) { seen.add(id); result.push({ floor, id }); }
-      }
-      return result;
-    });
-    for (const { floor, id } of floors) {
-      await page.evaluate(floor => MD.debugFloor(floor), floor);
-      await page.waitForTimeout(180);
-      await page.screenshot({ path: path.join(ROOT, 'test-results/paper-dungeon-' + id + '.png'), animations: 'disabled', fullPage: true });
+    for (const [id, floor] of floors) {
+      // Explicit designer URLs are isolated rendering fixtures. They never claim
+      // to be a player journey and do not teleport/debug-patch a running game.
+      await loaded(page, `?designer=1&dungeon=original&seed=42&floor=${floor}`);
+      await page.waitForFunction(theme => MD.view3d?.active && MD.view3d.getEnvironmentInfo().themeId === theme && !!MD_STATE.player._vid, id);
+      const actual = await page.evaluate(() => {
+        const gl = document.getElementById('game').getContext('webgl2');
+        return { webgl: !!gl && !gl.isContextLost(), info: MD.view3d.getEnvironmentInfo(), floor: MD_STATE.floor,
+          theme: MD_STATE.theme.id, debug: typeof MD.debugFloor };
+      });
+      assert.equal(actual.webgl, true, id + ' must not silently fall back to 2D');
+      assert.equal(actual.floor, floor); assert.equal(actual.theme, id); assert.equal(actual.debug, 'undefined');
+      assert.equal(actual.info.outlineMeshCount, 0, id + ' keeps outlines off environment geometry');
+      assert.ok(actual.info.meshNames.includes('dungeon-environment-volumes'));
+      assert.ok(actual.info.meshCount <= 6 && actual.info.vertices > 100, id + ' actual merged volumes');
+      assert.ok(actual.info.landmarkKinds.includes(expectedLandmarks[id]), id + ' built distinctive landmark');
+      assert.ok(actual.info.landmarkCounts[expectedLandmarks[id]] > 0, id + ' positive landmark assemblies');
+      signatures.add(actual.info.geometrySignature); forms.add(actual.info.form);
+      await assertFixedStage(page, 'WebGL ' + id);
+      await page.screenshot({ path: path.join(ROOT, 'test-results/game-dungeon-' + id + '.png'), animations: 'disabled', fullPage: true });
     }
+    assert.equal(signatures.size, 8); assert.equal(forms.size, 8);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: path.join(ROOT, 'test-results/paper-dungeon-mobile.png'), animations: 'disabled', fullPage: true });
+    await assertFixedStage(page, 'mobile WebGL');
+    await assertInsideViewport(page, '#game', 'mobile WebGL canvas');
+    await page.screenshot({ path: path.join(ROOT, 'test-results/game-dungeon-mobile.png'), animations: 'disabled', fullPage: true });
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
 
-test('paper town five-size layout keeps the background registered and all seven stickers separate', async () => {
+test('game stage five-size layout keeps scenery registered and all seven stickers separate', async () => {
   const context = await browser.newContext();
   const page = await context.newPage();
   try {
     await loaded(page);
     for (const [name, width, height] of [['wide',1440,900],['laptop',1280,720],['phone',390,844],['small',320,640],['landscape',844,390]]) {
       await page.setViewportSize({ width, height });
-      await page.evaluate(() => { document.getElementById('townOverlay').scrollTop = 0; });
       const layout = await page.evaluate(() => {
         const rect = node => { const r = node.getBoundingClientRect(); return { x:r.x,y:r.y,width:r.width,height:r.height }; };
         const town = document.getElementById('townOverlay');
         return { scene:rect(document.querySelector('.town-scene')), image:rect(document.querySelector('.town-map-bg')),
           overflow:town.scrollWidth > town.clientWidth, targets:[...document.querySelectorAll('.town-sticker')].map(node => ({id:node.id,...rect(node)})),
-          choice:rect(document.querySelector('.dungeon-choice')), heading:rect(document.querySelector('.town-heading')), session:rect(document.querySelector('.session-controls')) };
+          heading:rect(document.querySelector('.town-banner')), session:rect(document.querySelector('.session-controls')) };
       });
       assert.equal(layout.overflow, false, name + ' horizontal overflow');
-      assert.ok(layout.session.y + layout.session.height <= layout.heading.y || layout.session.x >= layout.heading.x + layout.heading.width || layout.session.x + layout.session.width <= layout.heading.x, name + ' session bar must not cover town heading or tools');
+      await assertFixedStage(page, name + ' town');
+      assert.ok(layout.session.y + layout.session.height <= layout.heading.y || layout.session.x >= layout.heading.x + layout.heading.width || layout.session.x + layout.session.width <= layout.heading.x, name + ' session bar must not cover town heading');
       for (const prop of ['x','y','width','height']) assert.ok(Math.abs(layout.scene[prop] - layout.image[prop]) < 1, name + ' image registration');
-      assert.ok(layout.choice.y >= layout.scene.y + layout.scene.height, name + ' departure cannot cover scene');
       for (let i = 0; i < layout.targets.length; i++) for (let j = i + 1; j < layout.targets.length; j++) {
         const a = layout.targets[i], b = layout.targets[j];
         const overlapX = Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x);
         const overlapY = Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);
         assert.ok(overlapX <= 1 || overlapY <= 1, name + ' overlapping hit targets ' + a.id + '/' + b.id);
       }
-      await page.screenshot({ path:path.join(ROOT,'test-results/paper-layout-' + name + '.png'), animations:'disabled',fullPage:true });
-      if (name === 'small' || name === 'landscape') {
-        await page.locator('#btnNewRun').scrollIntoViewIfNeeded();
-        await page.screenshot({ path:path.join(ROOT,'test-results/paper-layout-' + name + '-departure.png'), animations:'disabled',fullPage:true });
-      }
+      await page.screenshot({ path:path.join(ROOT,'test-results/game-stage-' + name + '.png'), animations:'disabled',fullPage:true });
+      await openRoutes(page);
+      const route = await page.locator('.route-map').boundingBox();
+      assert.ok(route.x >= 0 && route.x + route.width <= width + 1 && route.y >= 0 && route.y + route.height <= height + 1, name + ' route stays inside viewport');
+      await page.screenshot({ path:path.join(ROOT,'test-results/game-route-' + name + '.png'), animations:'disabled',fullPage:true });
+      await assertFixedStage(page, name + ' route');
+      await page.locator('#btnRouteClose').click();
+      await page.locator('#btnTownBag').click();
+      await assertInsideViewport(page, '#hudInv', name + ' bag');
+      await assertInsideViewport(page, '#hudSkills', name + ' town loadout');
+      await assertFixedStage(page, name + ' bag');
+      await page.locator('#btnInvClose').click();
+      await page.locator('#btnHelpTown').click();
+      await assertInsideViewport(page, '#helpOverlay .modal', name + ' handbook');
+      await assertFixedStage(page, name + ' handbook');
+      await page.locator('#btnHelpClose').click();
+      await page.locator('#stickerChatgpt').click();
+      await assertInsideViewport(page, '.pvn-card', name + ' conversation');
+      await assertFixedStage(page, name + ' conversation');
+      await page.keyboard.press('Escape');
+      await menuClick(page, '#btnSessionMenu');
+      await assertFixedStage(page, name + ' journey menu');
+      await menuClick(page, '#menuResume');
+      // Wheel input may scroll a local panel, but never the containing page.
+      await page.mouse.move(1, 1); await page.mouse.wheel(0, 800);
+      await assertFixedStage(page, name + ' after wheel');
     }
   } finally { await context.close(); }
 });
 
 
-test('inventory keyboard throw and staff aim work after focus moves onto the close button', async () => {
+test('isolated inventory fixture aims after native Tab reaches the close button', async () => {
   const context = await browser.newContext(); const page = await context.newPage();
   try {
     await loaded(page, '?designer=1&seed=42&flat=1');
@@ -705,11 +846,453 @@ test('inventory keyboard throw and staff aim work after focus moves onto the clo
       const before = await page.evaluate(type => { MD_STATE.enemies = []; MD_STATE.bag[0] = MD.makeItem(type); return MD_STATE.turn; }, type);
       await page.locator('#btnInv').click();
       await page.locator('#invGrid .slot[data-slot="0"]').click();
-      await page.locator('#btnInvClose').focus(); await page.keyboard.press(key);
+      await tabTo(page, '#btnInvClose'); await page.keyboard.press(key);
       assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
       await page.keyboard.press('ArrowRight');
       assert.equal(await page.evaluate(() => MD_STATE.aiming), null);
       assert.equal(await page.evaluate(() => MD_STATE.turn), before + 1);
+    }
+  } finally { await context.close(); }
+});
+
+async function playerState(page) {
+  return page.evaluate(() => {
+    const s = MD_STATE;
+    return { mode:s.mode, turn:s.turn, endKind:s.endKind, player:s.player, map:s.map, items:s.items, bag:s.bag, skills:s.skills };
+  });
+}
+async function pressTurn(page, key) {
+  const before = await playerState(page);
+  await page.keyboard.press(key);
+  await page.waitForFunction(turn => MD_STATE.turn > turn || MD_STATE.endKind, before.turn, { timeout: 2500 });
+  await page.waitForFunction(() => !MD_STATE.animLock, null, { timeout: 2500 });
+  const after = await playerState(page);
+  assert.equal(after.endKind, null, 'the continuous player journey must remain alive');
+  assert.ok(after.turn > before.turn, key + ' reaches gameplay without test-side focus repair');
+  return after;
+}
+async function pressMovement(page, label) {
+  const before = await playerState(page);
+  const direction = await page.evaluate(() => {
+    const s = MD_STATE, inputs = [[0,-1,'ArrowUp'],[1,0,'ArrowRight'],[0,1,'ArrowDown'],[-1,0,'ArrowLeft']];
+    return inputs.map(([sx, sy, key]) => {
+      const [dx,dy] = MD.view3d?.active ? MD.view3d.screenToTileDir(sx,sy) : [sx,sy];
+      return { key, dx, dy, x:s.player.x + dx, y:s.player.y + dy };
+    }).filter(step => MD.canStep(s.map, s.player.x, s.player.y, step.dx, step.dy)
+      && s.map.tiles[step.y][step.x] === MD.TILE.FLOOR
+      && !s.enemies.some(enemy => enemy.alive && enemy.x === step.x && enemy.y === step.y))
+      .sort((a,b) => Math.min(...s.enemies.filter(enemy => enemy.alive).map(enemy => Math.abs(enemy.x-b.x)+Math.abs(enemy.y-b.y)),100)
+        - Math.min(...s.enemies.filter(enemy => enemy.alive).map(enemy => Math.abs(enemy.x-a.x)+Math.abs(enemy.y-a.y)),100))[0];
+  });
+  assert.ok(direction, label + ' has an unoccupied walkable direction');
+  const after = await pressTurn(page, direction.key);
+  assert.deepEqual([after.player.x, after.player.y], [before.player.x + direction.dx, before.player.y + direction.dy],
+    label + ' next real arrow key moves one logical tile');
+  return after;
+}
+
+async function collectNaturalItem(page, accepts) {
+  const { nextStepToItem } = require('./helpers/journey-path.cjs');
+  let current = await playerState(page);
+  for (let step = 0; step < current.map.width * current.map.height; step++) {
+    if (current.bag.some(item => item && accepts(item))) return current;
+    const input = nextStepToItem(current, accepts);
+    assert.ok(input, 'a naturally spawned target item must be reachable without teleporting or injected loot');
+    current = await pressTurn(page, input);
+  }
+  assert.fail('the player could not reach the natural item');
+}
+
+// Read-only inverse of the actual game's camera-relative keyboard mapping.
+// Arrow chords use the real chord buffer; no synthetic DOM dispatch or focus.
+async function pressWorldStep(page, worldKey) {
+  const desired = { ArrowUp:[0,-1], ArrowRight:[1,0], ArrowDown:[0,1], ArrowLeft:[-1,0] }[worldKey];
+  assert.ok(desired, 'the route planner returns one cardinal world step');
+  const input = await page.evaluate(([dx, dy]) => {
+    const candidates = [[0,-1,'ArrowUp'], [1,0,'ArrowRight'], [0,1,'ArrowDown'], [-1,0,'ArrowLeft'],
+      [-1,-1,'ArrowUp+ArrowLeft'], [1,-1,'ArrowUp+ArrowRight'], [1,1,'ArrowDown+ArrowRight'], [-1,1,'ArrowDown+ArrowLeft']];
+    const selected = candidates.find(([sx, sy]) => {
+      const mapped = MD.view3d.screenToTileDir(sx, sy);
+      return mapped[0] === dx && mapped[1] === dy;
+    });
+    const p = MD_STATE.player;
+    return { keys:selected?.[2], yaw:MD.view3d.getYaw(), x:p.x, y:p.y,
+      occupied:MD_STATE.enemies.some(enemy => enemy.alive && enemy.x === p.x + dx && enemy.y === p.y + dy) };
+  }, desired);
+  assert.ok(input.keys, 'camera yaw ' + input.yaw + ' has a real key combination for ' + worldKey);
+  const after = await pressTurn(page, input.keys);
+  const expected = input.occupied ? [input.x, input.y] : [input.x + desired[0], input.y + desired[1]];
+  assert.deepEqual([after.player.x, after.player.y], expected, 'camera-relative input moves or attacks the planned world tile');
+  return after;
+}
+
+test('normal WebGL journey captures natural enemies, floor loot, FOV and camera-relative pickup', { timeout:90000 }, async t => {
+  const started = Date.now();
+  const checkpointLog = step => console.log('normal WebGL checkpoint ' + JSON.stringify({ step,elapsedMs:Date.now() - started }));
+  const context = await browser.newContext({ viewport:{ width:1440, height:960 }, reducedMotion:'reduce' });
+  const abortContext = () => {
+    checkpointLog('deadline abort closes this context');
+    void context.close().catch(() => {});
+  };
+  t.signal.addEventListener('abort', abortContext, { once:true });
+  // Control exactly fresh()'s one seed draw. Three's UUID/material/texture
+  // allocation must keep native randomness before and after that call.
+  await context.addInitScript(() => {
+    const originalRandom = Math.random;
+    Math.random = function () {
+      const caller = (new Error().stack || '').split('\n')[2] || '';
+      if (/\bfresh\b/.test(caller) && /\/js\/game\.js[?:]/.test(caller)) {
+        Math.random = originalRandom;
+        return 4 / 4294967296;
+      }
+      return originalRandom();
+    };
+  });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const { nextStepToItem } = require('./helpers/journey-path.cjs');
+  const observe = () => page.evaluate(() => {
+    const s = MD_STATE, key = actor => MD.key(actor.x, actor.y);
+    return { visibleItems:s.items.filter(item => s.visible.has(key(item))).length,
+      visibleEnemies:s.enemies.filter(enemy => enemy.alive && s.visible.has(key(enemy))).length,
+      roomId:MD.getRoomId(s.map, s.player.x, s.player.y), visible:s.visible.size, explored:s.explored.size,
+      cells:s.map.width * s.map.height, debug:s.debug, preview:!!MD.preview };
+  });
+  try {
+    await loaded(page, '');
+    assert.equal(await page.evaluate(() => MD.random.getState()), 4, 'only the ordinary fresh journey seed was controlled');
+    assert.match(await page.evaluate(() => Math.random.toString()), /\[native code\]/, 'native UUID randomness is restored immediately after the seed draw');
+    await depart(page);
+    await page.waitForFunction(() => MD.view3d?.active && !!MD_STATE.player?._vid);
+    assert.equal(await page.evaluate(() => {
+      const gl = document.getElementById('game').getContext('webgl2');
+      return !!gl && !gl.isContextLost();
+    }), true, 'ordinary gameplay must use actual WebGL');
+    assert.equal(await page.evaluate(() => typeof MD.debugFloor), 'undefined');
+    const start = await playerState(page);
+    assert.ok(start.bag.every(item => item === null));
+    fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive:true });
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-departure.png'), fullPage:true });
+    checkpointLog('departure screenshot saved');
+
+    let current = start, encounter = await observe();
+    for (let steps = 0; steps < current.map.width * current.map.height; steps++) {
+      if (encounter.roomId >= 0 && encounter.visibleItems > 0 && encounter.visibleEnemies > 0) break;
+      const direction = nextStepToItem(current, () => true);
+      assert.ok(direction, 'naturally generated floor loot is reachable without crossing stairs');
+      current = await pressWorldStep(page, direction);
+      encounter = await observe();
+    }
+    assert.ok(encounter.roomId >= 0 && encounter.visibleItems > 0 && encounter.visibleEnemies > 0,
+      'the screenshot must show a real room with naturally generated enemies and ground loot');
+    assert.equal(encounter.debug, false); assert.equal(encounter.preview, false);
+    assert.ok(encounter.visible > 0 && encounter.visible < encounter.cells, 'normal FOV remains enabled');
+    assert.ok(encounter.explored > encounter.visible, 'the genuine walk leaves remembered terrain behind');
+    assert.notDeepEqual([current.player.x,current.player.y], [start.player.x,start.player.y]);
+    await page.waitForFunction(() => MD_STATE.enemies.filter(enemy => enemy.alive && MD_STATE.visible.has(MD.key(enemy.x, enemy.y))).every(enemy => !!enemy._vid));
+    await assertFixedStage(page, 'normal WebGL encounter');
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-natural-encounter.png'), fullPage:true });
+    checkpointLog('natural encounter screenshot saved');
+
+    // Turn the camera through its public key control, then recompute the input
+    // mapping before continuing the same live journey toward the visible loot.
+    const yaw = await page.evaluate(() => MD.view3d.getYaw()), turn = current.turn;
+    await page.keyboard.press('q');
+    assert.notEqual(await page.evaluate(() => MD.view3d.getYaw()), yaw);
+    assert.equal(await page.evaluate(() => MD_STATE.turn), turn, 'camera orbit is not a gameplay turn');
+    for (let steps = 0; !current.bag.some(Boolean) && steps < current.map.width * current.map.height; steps++) {
+      const direction = nextStepToItem(current, () => true);
+      assert.ok(direction, 'the live pickup remains reachable after camera orbit');
+      current = await pressWorldStep(page, direction);
+    }
+    assert.ok(current.bag.some(Boolean), 'real keyboard movement picks up naturally spawned loot');
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-after-pickup.png'), fullPage:true });
+    await page.locator('#btnInv').click();
+    await page.screenshot({ path:path.join(ROOT, 'test-results/normal-webgl-loot-in-bag.png'), fullPage:true });
+    checkpointLog('pickup and bag screenshots saved');
+    await page.locator('#btnInvClose').click();
+    await pressTurn(page, 'Space');
+    assert.deepEqual(errors, []);
+    checkpointLog('natural journey passed');
+  } finally {
+    checkpointLog('context close start');
+    await context.close();
+    t.signal.removeEventListener('abort', abortContext);
+    checkpointLog('context closed');
+  }
+});
+
+test('normal WebGL HUD stays separated across six viewports with real save controls', { timeout:90000 }, async t => {
+  const started = Date.now();
+  const checkpointLog = step => console.log('normal HUD checkpoint ' + JSON.stringify({ step,elapsedMs:Date.now() - started }));
+  const context = await browser.newContext({ viewport:{ width:1440, height:900 }, reducedMotion:'reduce' });
+  const abortContext = () => {
+    checkpointLog('deadline abort closes this context');
+    void context.close().catch(() => {});
+  };
+  t.signal.addEventListener('abort', abortContext, { once:true });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    // A separate ordinary new game keeps the original natural-encounter test's
+    // 90-second budget intact. No designer URL, save import or state injection.
+    await loaded(page, '');
+    await depart(page);
+    await page.waitForFunction(() => MD.view3d?.active && !!MD_STATE.player?._vid);
+    assert.equal(await page.evaluate(() => {
+      const gl = document.getElementById('game').getContext('webgl2');
+      return !!gl && !gl.isContextLost();
+    }), true);
+    await pressTurn(page, 'Space');
+    await page.waitForFunction(() => document.getElementById('saveStatus').textContent.includes('已自动保存'));
+    const checkpoint = await savedSnapshot(page);
+    fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive:true });
+    checkpointLog('normal journey saved; starting six HUD viewports');
+    for (const [name, width, height] of [['wide',1440,900], ['laptop',1280,720], ['phone',390,844],
+      ['small',320,640], ['landscape',844,390], ['short-phone',390,780]]) {
+      checkpointLog(name + ' resize start');
+      await page.setViewportSize({ width,height });
+      await assertNormalHudSafe(page, 'normal WebGL ' + name, checkpoint);
+      checkpointLog(name + ' geometry and unchanged state passed');
+      if (['wide','phone','small','landscape'].includes(name)) {
+        await page.screenshot({ path:path.join(ROOT, 'test-results/normal-hud-safe-' + name + '.png'), fullPage:true });
+        checkpointLog(name + ' screenshot saved');
+      }
+    }
+    assert.deepEqual(errors, []);
+    checkpointLog('all six HUD viewports passed');
+  } finally {
+    checkpointLog('context close start');
+    await context.close();
+    t.signal.removeEventListener('abort', abortContext);
+    checkpointLog('context closed');
+  }
+});
+
+test('continuous new-player journey keeps actual keys working through town, modals, loot, reload and natural return', { timeout: 120000 }, async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, reducedMotion: 'reduce' });
+  // Control only the new-run random seed before any application code executes.
+  // The workbook config, map generation, spawned items and every input stay real.
+  await context.addInitScript(() => { Math.random = () => 42 / 4294967296; });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(base + '/index.html?flat=1');
+    await page.waitForFunction(() => window.MD_STATE && document.getElementById('loadingScreen').hidden);
+    await menuClick(page, '#menuNew');
+    await page.locator('button[data-slot="1"][data-action="new"]').click();
+    await page.waitForFunction(() => MDMenu.activeSlot === 1 && !MD.session.isPaused());
+    assert.equal(await page.evaluate(() => MD_STATE.bag.every(item => item === null)), true);
+    assert.equal(await page.evaluate(() => typeof MD.debugFloor), 'undefined');
+
+    await page.locator('#btnTownBag').click();
+    await page.locator('#btnInvClose').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'btnTownBag');
+    await page.locator('#btnHelpTown').click();
+    await page.locator('#btnHelpClose').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'btnHelpTown');
+    await page.locator('#stickerChatgpt').click();
+    await page.locator('.pvn-choice[data-choice="route"]').click();
+    await page.locator('.pvn-next').click();
+    await page.locator('.pvn-choice[data-choice="done"]').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'stickerChatgpt');
+
+    await page.locator('#stickerEntrance').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#menuScreen').isVisible(), false, 'dismissing a route must not also open the save menu');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'stickerEntrance');
+    await page.locator('#stickerEntrance').click();
+    await page.locator('#routeChoices button[data-dungeon="trainingGrove"]').click();
+    await page.locator('#routeChoices button[data-dungeon="original"]').click();
+    assert.equal(await page.locator('#dungeonSelect').inputValue(), 'original');
+    await page.locator('#btnNewRun').click();
+    await page.waitForFunction(() => MD_STATE.mode === 'dungeon');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
+    const start = await playerState(page);
+    await pressTurn(page, 'Space');
+
+    // Reproduce the reported stale-button focus through clicks and through Esc,
+    // then immediately send actual movement/wait keys without any .focus().
+    for (const [opener, closer] of [['#btnInv', '#btnInvClose'], ['#btnHelp', '#btnHelpClose']]) {
+      await page.locator(opener).click();
+      await page.locator(closer).click();
+      await pressMovement(page, opener + ' close button');
+      await page.locator(opener).click();
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#menuScreen').isVisible(), false, 'modal Escape does not leak into the menu');
+      await pressMovement(page, opener + ' Escape');
+    }
+    for (const dismissal of ['click', 'Escape']) {
+      await menuClick(page, '#btnSessionMenu');
+      const paused = await savedSnapshot(page);
+      await page.keyboard.press('ArrowRight');
+      assert.deepEqual(await savedSnapshot(page), paused, 'menu owns movement');
+      if (dismissal === 'click') await menuClick(page, '#menuResume');
+      else await page.keyboard.press('Escape');
+      await pressMovement(page, 'menu ' + dismissal);
+    }
+    let state = await collectNaturalItem(page, item => item.type === 'rock' || item.type === 'knockStaff');
+    assert.notDeepEqual([state.player.x, state.player.y], [start.player.x, start.player.y], 'actual keyboard movement changes position');
+    state = await collectNaturalItem(page, item => item.type === 'onigiri');
+    const foodIndex = state.bag.findIndex(item => item && item.type === 'onigiri');
+    const foodUid = state.bag[foodIndex].uid, foodTurn = state.turn;
+    await page.locator('#btnInv').click();
+    await page.locator('#invGrid .slot[data-slot="' + foodIndex + '"]').click();
+    await page.locator('#invActions button').first().click();
+    await page.waitForFunction(turn => MD_STATE.turn > turn, foodTurn);
+    assert.equal(await page.evaluate(uid => MD_STATE.bag.some(item => item && item.uid === uid), foodUid), false);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
+    await pressTurn(page, 'Space');
+
+    state = await playerState(page);
+    const itemIndex = state.bag.findIndex(item => item && ['rock', 'knockStaff'].includes(item.type));
+    const equipped = state.bag[itemIndex];
+    await page.locator('#btnInv').click();
+    await page.locator('#invGrid .slot[data-slot="' + itemIndex + '"]').dragTo(page.locator('#skillActive0'));
+    assert.equal(await page.evaluate(() => MD_STATE.skills.active[0].uid), equipped.uid);
+    await page.locator('#btnInvClose').click();
+    await pressTurn(page, 'Space');
+    const turn = await page.evaluate(() => MD_STATE.turn);
+    const skill = await page.locator('#skillActive0').boundingBox();
+    await page.mouse.move(skill.x + skill.width / 2, skill.y + skill.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(skill.x + skill.width / 2 + 75, skill.y + skill.height / 2 - 45, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForFunction(previous => MD_STATE.turn > previous, turn);
+    const used = await page.evaluate(() => MD_STATE.skills.active[0]);
+    if (equipped.type === 'rock') assert.equal(used, null);
+    else assert.equal(used.charges, equipped.charges - 1);
+    await pressTurn(page, 'Space');
+    fs.mkdirSync(path.join(ROOT, 'test-results'), { recursive: true });
+    await page.screenshot({ path:path.join(ROOT,'test-results/continuous-player-journey.png'), fullPage:true });
+    await menuClick(page, '#btnSessionMenu');
+    const saved = await savedSnapshot(page);
+    await page.reload(); await readyMenu(page); await menuClick(page, '#menuContinue');
+    assert.deepEqual(await savedSnapshot(page), saved);
+    await pressMovement(page, 'Continue after reload');
+    await assertFixedStage(page, 'continued journey');
+
+    // Reach a real outcome with ordinary wait keys. The workbook hunger rules
+    // bound the run even if no monster finds the player; no stats, map, enemy,
+    // inventory or focus state is injected to create the ending.
+    const naturalWaitLimit = await page.evaluate(() => {
+      const { player, floorConfig } = MD_STATE;
+      return player.belly * floorConfig.rules.hungerEvery
+        + Math.ceil(player.maxHp / floorConfig.rules.starvationDamage) + 1;
+    });
+    let ending = await playerState(page);
+    for (let waits = 0; !ending.endKind && waits < naturalWaitLimit; waits++) {
+      await page.keyboard.press('Space');
+      await page.waitForFunction(turn => MD_STATE.turn > turn || MD_STATE.endKind, ending.turn, { timeout:2500 });
+      await page.waitForFunction(() => !MD_STATE.animLock, null, { timeout:2500 });
+      ending = await playerState(page);
+    }
+    assert.equal(ending.endKind, 'death', 'ordinary waits reach the natural defeat flow');
+    await page.locator('#endOverlay:not(.hidden)').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'btnEndOk');
+    await page.locator('#btnEndOk').click();
+    assert.equal(await page.evaluate(() => MD_STATE.mode), 'town');
+    assert.equal(await page.evaluate(() => MD_STATE.endKind), null);
+    assert.equal(await page.evaluate(() => MD_STATE.player), null);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'stickerChatgpt');
+    await page.keyboard.press('Enter');
+    await page.locator('.pvn-overlay').waitFor();
+    await page.keyboard.press('Escape');
+    await page.locator('#btnTownBag').click();
+    await page.locator('#btnWhToggle').click();
+    await page.locator('#btnWhClose').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'btnWhToggle');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'btnTownBag');
+    await assertFixedStage(page, 'natural town return');
+    await page.screenshot({ path:path.join(ROOT,'test-results/natural-town-return.png'), fullPage:true });
+    await depart(page);
+    await pressMovement(page, 'new expedition after natural town return');
+    for (let repetition = 0; repetition < 2; repetition++) {
+      await page.locator('#btnLogToggle').click();
+      await pressMovement(page, 'log toggle ' + repetition);
+    }
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('town inventory fixture supports a real bag-to-skill drag above the town layer', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } }), page = await context.newPage();
+  try {
+    await loaded(page);
+    // A focused fixture isolates town loadout access; the separate complete
+    // journey above starts with an empty bag and obtains its own natural loot.
+    await page.evaluate(() => { MD_STATE.bag[0] = MD.makeItem('rock'); });
+    await page.locator('#btnTownBag').click();
+    assert.equal(await page.locator('#hudSkills').evaluate(node => node.inert || !!node.closest('[inert]')), false);
+    assert.equal(await page.locator('#hudSkills').evaluate(node => node.parentElement === document.body), true);
+    const box = await page.locator('#skillActive0').boundingBox();
+    assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.skill-slot')?.id, { x:box.x + box.width / 2, y:box.y + box.height / 2 }), 'skillActive0');
+    await page.locator('#invGrid .slot[data-slot="0"]').dragTo(page.locator('#skillActive0'));
+    assert.equal(await page.evaluate(() => MD_STATE.skills.active[0].type), 'rock');
+    assert.equal(await page.evaluate(() => MD_STATE.bag[0]), null);
+    await page.screenshot({ path:path.join(ROOT,'test-results/town-loadout-drag.png'), fullPage:true });
+    await page.locator('#btnInvClose').click();
+    await page.locator('#btnHelpTown').click();
+    assert.equal(await page.locator('#hudSkills').evaluate(node => node.inert), true);
+    await page.locator('#btnHelpClose').click();
+    assert.equal(await page.locator('#hudSkills').evaluate(node => node.inert), false);
+  } finally { await context.close(); }
+});
+
+async function stickerGeometry(page, id) {
+  return page.locator('#' + id).evaluate(async node => {
+    const rect = element => { const r = element.getBoundingClientRect(); return { x:r.x,y:r.y,width:r.width,height:r.height }; };
+    const painted = [];
+    for (const img of node.querySelectorAll('.town-sticker-media img')) {
+      if (getComputedStyle(img).display === 'none' || Number(getComputedStyle(img).opacity) < .01) continue;
+      await img.decode();
+      const canvas = document.createElement('canvas'); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently:true }); ctx.drawImage(img, 0, 0);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let left=canvas.width, top=canvas.height, right=0, bottom=0;
+      for (let y=0; y<canvas.height; y++) for (let x=0; x<canvas.width; x++) {
+        if (pixels[(y*canvas.width+x)*4+3] <= 32) continue;
+        left=Math.min(left,x); top=Math.min(top,y); right=Math.max(right,x+1); bottom=Math.max(bottom,y+1);
+      }
+      const r = img.getBoundingClientRect();
+      painted.push({ source:img.currentSrc, x:r.x+left/canvas.width*r.width, y:r.y+top/canvas.height*r.height,
+        width:(right-left)/canvas.width*r.width, height:(bottom-top)/canvas.height*r.height, foot:r.y+bottom/canvas.height*r.height });
+    }
+    return { hotspot:rect(node), media:rect(node.querySelector('.town-sticker-media')), painted };
+  });
+}
+function assertStickerStill(actual, expected, label) {
+  assert.equal(actual.painted.length, expected.painted.length, label + ' visible pose count');
+  for (const part of ['hotspot', 'media']) for (const key of ['x','y','width','height']) {
+    assert.ok(Math.abs(actual[part][key]-expected[part][key]) < .5, `${label} ${part}.${key} moved`);
+  }
+  actual.painted.forEach((image, index) => {
+    assert.equal(image.source, expected.painted[index].source, label + ' must retain its drawn pose');
+    for (const key of ['x','y','width','height','foot']) assert.ok(Math.abs(image[key]-expected.painted[index][key]) < .5, `${label} painted ${key} moved`);
+  });
+}
+test('eight hover enter/leave cycles preserve every hotspot and actual alpha-bounded character feet', { timeout: 120000 }, async () => {
+  const context = await browser.newContext({ reducedMotion:'no-preference' }), page = await context.newPage();
+  try {
+    await loaded(page);
+    for (const [width,height] of [[1440,900],[390,844]]) {
+      await page.setViewportSize({ width,height });
+      for (const id of ['stickerEntrance','stickerChatgpt','stickerClaude','stickerKimi','stickerGlm','stickerHarness','stickerDeepseek']) {
+        await page.mouse.move(1,1);
+        await page.waitForTimeout(150);
+        const baseline = await stickerGeometry(page,id);
+        assert.equal(baseline.painted.length,1,id + ' has one stable visible drawing');
+        for (let cycle=0; cycle<8; cycle++) {
+          await page.locator('#'+id).hover();
+          assertStickerStill(await stickerGeometry(page,id),baseline,`${width} ${id} enter ${cycle}`);
+          await page.waitForTimeout(150);
+          assertStickerStill(await stickerGeometry(page,id),baseline,`${width} ${id} hover ${cycle}`);
+          await page.mouse.move(1,1);
+          await page.waitForTimeout(150);
+          assertStickerStill(await stickerGeometry(page,id),baseline,`${width} ${id} leave ${cycle}`);
+        }
+      }
     }
   } finally { await context.close(); }
 });

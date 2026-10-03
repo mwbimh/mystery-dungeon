@@ -37,6 +37,168 @@ test('managed startup is paused and keyboard cannot start a hidden journey', asy
   assert.equal(h.state.mode, 'town'); assert.equal(h.state.player, null);
 });
 
+test('shared minimap layout is finite, immutable and inside six unobstructed viewport sizes', async () => {
+  const h = await game();
+  for (const [width, height] of [[1440,900], [1280,720], [390,844], [320,640], [844,390], [390,780]]) {
+    for (const map of [{ width:30, height:26 }, { width:52, height:34 }, { width:61, height:61 }]) {
+      const before = plain(map), layout = h.MD.layoutMinimap(map, width, height);
+      assert.equal(Object.isFrozen(layout), true);
+      for (const value of Object.values(layout)) assert.ok(Number.isFinite(value));
+      assert.ok(layout.scale > 0 && layout.scale <= 2);
+      assert.equal(layout.width, Math.ceil(map.width * layout.scale + 8));
+      assert.equal(layout.height, Math.ceil(map.height * layout.scale + 8));
+      assert.equal(layout.x + layout.width, width - 12);
+      assert.equal(layout.y, 12);
+      assert.ok(layout.x >= 12 && layout.y + layout.height <= height - 12);
+      assert.deepEqual(map, before, 'the layout never mutates generated map dimensions');
+    }
+  }
+});
+
+test('minimap avoids normal save controls, vitals, bag, log, skills and preview header regardless of obstacle order', async () => {
+  const h = await game();
+  for (const [width, height] of [[1440,900], [1280,720], [390,844], [320,640], [844,390], [390,780]]) {
+    const compact = width <= 700;
+    const controls = [
+      { x:width - (compact ? 74 : 262), y:12, width:compact ? 64 : 244, height:compact ? 36 : 43 },
+      { x:compact ? 3 : 12, y:compact ? 5 : 10, width:compact ? 230 : 325, height:94 },
+      { x:10, y:104, width:compact ? 54 : 67, height:67 },
+      { x:width - (compact ? 208 : 298), y:height - (compact ? 220 : 308), width:compact ? 200 : 282, height:compact ? 130 : 180 },
+      { x:(width - (compact ? 194 : 330)) / 2, y:height - (compact ? 74 : 106), width:compact ? 194 : 330, height:compact ? 67 : 94 },
+    ];
+    for (const obstacles of [controls, [...controls, { x:0, y:0, width, height:22 }]]) {
+      const before = plain(obstacles), map = { width:52, height:34 };
+      const layout = h.MD.layoutMinimap(map, width, height, obstacles);
+      assert.deepEqual(plain(h.MD.layoutMinimap(map, width, height, [...obstacles].reverse())), plain(layout));
+      for (const rect of obstacles) {
+        const separated = layout.x >= rect.x + rect.width + 10 || layout.x + layout.width + 10 <= rect.x
+          || layout.y >= rect.y + rect.height + 10 || layout.y + layout.height + 10 <= rect.y;
+        assert.ok(separated, width + '×' + height + ' keeps a ten-pixel safe gap around ' + JSON.stringify(rect));
+      }
+      assert.ok(layout.x >= 0 && layout.y >= 0 && layout.x + layout.width <= width && layout.y + layout.height <= height);
+      assert.deepEqual(obstacles, before, 'measured controls remain untouched');
+    }
+  }
+});
+
+test('minimap resolves stacked collisions repeatedly and ignores zero-area hidden controls', async () => {
+  const h = await game(), map = { width:52, height:34 };
+  const blockers = [
+    { x:250, y:110, width:120, height:58 },
+    { x:250, y:12, width:128, height:43 },
+    { x:0, y:0, width:0, height:780 },
+    { x:0, y:0, width:390, height:0 },
+    null,
+  ];
+  const layout = h.MD.layoutMinimap(map, 390, 780, blockers);
+  assert.equal(layout.y, 178, 'the map clears both stacked right-hand controls');
+  assert.deepEqual(plain(h.MD.layoutMinimap(map, 390, 780, [blockers[1], blockers[0]])), plain(layout));
+});
+
+test('large minimap uses another open HUD edge when the right rail has no safe vertical space', async () => {
+  const h = await game(), map = { width:61, height:61 };
+  const obstacles = [
+    { x:582, y:12, width:244, height:43 },
+    { x:12, y:10, width:325, height:94 },
+    { x:546, y:172, width:282, height:180 },
+    { x:310, y:401, width:230, height:73 },
+  ];
+  const layout = h.MD.layoutMinimap(map, 844, 480, obstacles);
+  assert.ok(layout.x < 844 - layout.width - 12, 'do not push the map offscreen below the log');
+  assert.ok(layout.x >= 12 && layout.y >= 12 && layout.x + layout.width <= 832 && layout.y + layout.height <= 468);
+  for (const rect of obstacles) {
+    assert.ok(layout.x >= rect.x + rect.width + 10 || layout.x + layout.width + 10 <= rect.x
+      || layout.y >= rect.y + rect.height + 10 || layout.y + layout.height + 10 <= rect.y);
+  }
+});
+
+test('closing dungeon bag and help restores playable focus for the very next key', async () => {
+  const h = await game(); begin(h); h.state.enemies = [];
+  for (const [open, close] of [['btnInv', 'btnInvClose'], ['btnHelp', 'btnHelpClose']]) {
+    for (let repetition = 0; repetition < 3; repetition++) {
+      h.get(open).click();
+      assert.equal(h.context.document.activeElement.id, close);
+      h.get(close).click();
+      assert.equal(h.context.document.activeElement.id, 'game');
+      const before = h.state.turn;
+      h.key(' ');
+      assert.equal(h.state.turn, before + 1, open + ' must not swallow the next wait');
+    }
+  }
+  h.get('btnInv').click(); h.key('Escape');
+  assert.equal(h.context.document.activeElement.id, 'game');
+  h.get('btnHelp').click(); h.key('Escape');
+  assert.equal(h.context.document.activeElement.id, 'game');
+});
+
+test('town loadout shares the accessible body layer with the bag and restores board ownership', async () => {
+  const h = await game(); h.MD.session.fresh(); h.MD.session.resume();
+  const body = h.context.document.body;
+  assert.equal(h.get('hudSkills').parentElement, body);
+  assert.equal(h.get('hudSkills').inert, false);
+  h.state.bag[0] = h.MD.makeItem('rock');
+  h.get('btnTownBag').click();
+  assert.equal(h.get('hudInv').parentElement, body);
+  assert.equal(h.get('hudSkills').inert, false);
+  assert.equal(h.get('townOverlay').inert, true);
+  const active = h.get('skillActive0');
+  active.dispatch('drop', { dataTransfer: { getData: () => '0' } });
+  assert.equal(h.state.skills.active[0].type, 'rock');
+  assert.equal(h.state.bag[0], null);
+  h.get('btnInvClose').click();
+  assert.equal(h.context.document.activeElement.id, 'btnTownBag');
+  h.get('btnHelpTown').click(); assert.equal(h.get('hudSkills').inert, true);
+  h.get('btnHelpClose').click(); assert.equal(h.get('hudSkills').inert, false);
+  h.get('btnNewRun').click();
+  assert.notEqual(h.get('hudSkills').parentElement, body);
+  assert.equal(body.classList.contains('town-active'), false);
+});
+
+test('route panel dismisses without departing, blocks town tools and selects only configured routes', async () => {
+  const h = await game(); h.MD.session.fresh(); h.MD.session.resume();
+  h.get('btnTownRoute').click();
+  assert.equal(h.state.mode, 'town'); assert.equal(h.get('routeOverlay').classList.contains('hidden'), false);
+  assert.equal(h.get('townOverlay').inert, true); assert.equal(h.get('hudSkills').inert, true);
+  h.key('i'); assert.equal(h.state.invOpen, false);
+  h.key('Escape');
+  assert.equal(h.get('routeOverlay').classList.contains('hidden'), true);
+  assert.equal(h.context.document.activeElement.id, 'btnTownRoute');
+  h.get('btnTownRoute').click();
+  const choice = h.get('routeChoices').children.find(button => button.dataset.dungeon === 'trainingGrove');
+  choice.click(); assert.equal(h.state.dungeonId, 'trainingGrove'); assert.equal(choice['aria-pressed'], 'true');
+  h.get('btnNewRun').click();
+  assert.equal(h.state.mode, 'dungeon'); assert.equal(h.get('routeOverlay').classList.contains('hidden'), true);
+  assert.equal(h.context.document.activeElement.id, 'game');
+  const before = h.state.turn; h.key(' '); assert.equal(h.state.turn, before + 1);
+});
+
+test('natural defeat returns town focus, warehouse dismissal and the next expedition to usable controls', async () => {
+  const h = await game({ query:'?flat=1' }); begin(h);
+  assert.equal(typeof h.MD.debugFloor, 'undefined');
+  const { hungerEvery, starvationDamage } = h.state.floorConfig.rules;
+  const limit = h.state.player.belly * hungerEvery + Math.ceil(h.state.player.maxHp / starvationDamage) + 1;
+  for (let waits = 0; !h.state.endKind && waits < limit; waits++) {
+    h.key(' '); await h.flushTimers();
+  }
+  assert.equal(h.state.endKind, 'death');
+  assert.equal(h.context.document.activeElement.id, 'btnEndOk');
+  h.get('btnEndOk').click();
+  assert.equal(h.state.mode, 'town'); assert.equal(h.state.endKind, null);
+  assert.equal(h.context.document.activeElement.id, 'stickerChatgpt');
+  h.get('btnTownBag').click(); h.get('btnWhToggle').click(); h.get('btnWhClose').click();
+  assert.equal(h.state.whOpen, false);
+  assert.equal(h.context.document.activeElement.id, 'btnWhToggle');
+  h.key('Escape'); assert.equal(h.context.document.activeElement.id, 'btnTownBag');
+  h.get('btnNewRun').click();
+  assert.equal(h.context.document.activeElement.id, 'game');
+  for (let repetition = 0; repetition < 2; repetition++) {
+    h.get('btnLogToggle').click();
+    assert.equal(h.context.document.activeElement.id, 'game');
+    const before = h.state.turn; h.key(' '); await h.flushTimers();
+    assert.equal(h.state.turn, before + 1);
+  }
+});
+
 for (const dungeon of ['original', 'trainingGrove']) {
   test(`full ${dungeon} snapshot export/import restores state and the following RNG sequence`, async () => {
     const first = await game(); begin(first, dungeon);

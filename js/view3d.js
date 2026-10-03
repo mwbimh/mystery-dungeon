@@ -1,4 +1,4 @@
-/* 2.5D diorama renderer — carved cave mesh + orbit camera + paper actors */
+/* 2.5D diorama renderer — theme-specific terrain volumes + outlined target actors */
 (function (global) {
   const MD = global.MD;
   MD.view3d = {
@@ -19,7 +19,7 @@
   const PITCH_FIXED = 52 * DEG; // locked overhead; orbit yaw only
   const DIST_MIN = 4;
   const DIST_MAX = 16;
-  const UV_SCALE = 0.48;
+  const UV_SCALE = 0.38;
   const YAW_STEP = 15 * DEG;
 
   const COL = {
@@ -46,10 +46,11 @@
   let wallMesh = null;
   let floorMeshB = null;
   let wallMeshB = null;
-  let edgeMesh = null;
-  let paperDetailMesh = null;
-  let paperDetailMeta = [];
-  let edgeMeta = [];
+  let surfaceMesh = null;
+  let environmentMesh = null;
+  let environmentMeta = [];
+  let surfaceMeta = [];
+  let environmentStats = { primitiveCounts: {}, landmarkCounts: {} };
   let floorMeta = [];
   let wallMeta = [];
   let floorMetaB = [];
@@ -71,6 +72,7 @@
   let rockTexB = null;
   let currentTheme = null;
   let pendingTheme = null;
+  const terrainTextures = Object.create(null);
 
   const actorPool = [];
   const itemPool = [];
@@ -84,7 +86,7 @@
   const orbit = {
     yaw: 0.68,
     pitch: PITCH_FIXED,
-    dist: 9.4,
+    dist: 7.8,
   };
   let dragging = false;
   let lastPtrX = 0;
@@ -150,8 +152,8 @@
     return !!(MD.settings && MD.settings.reducedMotion);
   }
 
-  function paperStyle() {
-    return MD.paperTerrain ? MD.paperTerrain.style(currentTheme) : { rim: 0xfff0d6, ink: 0x62576b, accent: 0xb29abd, fleck: 0xe7d0a1 };
+  function environment() {
+    return (currentTheme && currentTheme.environment) || MD.THEMES[0].environment;
   }
 
   function fxStamp(shape) {
@@ -205,12 +207,12 @@
       const col = new Float32Array(N * 3);
       const seeds = new Float32Array(N);
       for (let i = 0; i < N; i++) {
-        pos[i * 3] = (Math.random() - 0.5) * cfg.spread;
-        pos[i * 3 + 1] = Math.random() * cfg.height;
-        pos[i * 3 + 2] = (Math.random() - 0.5) * cfg.spread;
+        pos[i * 3] = (hash01(i + 17, N + 5) - 0.5) * cfg.spread;
+        pos[i * 3 + 1] = hash01(i + 23, N + 11) * cfg.height;
+        pos[i * 3 + 2] = (hash01(i + 29, N + 19) - 0.5) * cfg.spread;
         const c = colors[i % colors.length];
         col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-        seeds[i] = Math.random() * Math.PI * 2;
+        seeds[i] = hash01(i + 31, N + 37) * Math.PI * 2;
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
@@ -270,6 +272,8 @@
     if (!active || !scene) { pendingTheme = theme; return; }
     if (currentTheme === theme) return;
     currentTheme = theme;
+    // A theme switch on the same logical floor also rebuilds its visual geometry.
+    lastMap = null;
     if (scene.fog) {
       scene.fog.color.set(theme.fog);
       if (theme.fogDensity && scene.fog.density != null) scene.fog.density = theme.fogDensity;
@@ -277,7 +281,7 @@
     if (scene.background && scene.background.set) scene.background.set(theme.fog);
     if (renderer) renderer.setClearColor(theme.fog, 1);
     if (groundMesh) {
-      groundMesh.material.color.set(theme.fog).multiplyScalar(0.25);
+      groundMesh.material.color.set(theme.fog);
     }
     if (hemi) {
       hemi.color.set(theme.hemiSky);
@@ -297,99 +301,178 @@
       COL.wallMem.set(theme.tints.wallMem);
     }
     lastVisSig = "";
-    tryLoadRuntimeCaveTex(theme.floorTex, function (tex) {
-      dirtTex = tex;
-      if (floorMesh && floorMesh.material) {
-        floorMesh.material.map = tex;
-        floorMesh.material.needsUpdate = true;
-      }
-    }, function () {
-      dirtTex = makeSeamlessTex(256, 3, theme.palFloor);
-      if (floorMesh && floorMesh.material) {
-        floorMesh.material.map = dirtTex;
-        floorMesh.material.needsUpdate = true;
-      }
-    });
-    tryLoadRuntimeCaveTex(theme.wallTex, function (tex) {
-      rockTex = tex;
-      if (wallMesh && wallMesh.material) {
-        wallMesh.material.map = tex;
-        wallMesh.material.needsUpdate = true;
-      }
-    }, function () {
-      rockTex = makeSeamlessTex(256, 19, theme.palWall);
-      if (wallMesh && wallMesh.material) {
-        wallMesh.material.map = rockTex;
-        wallMesh.material.needsUpdate = true;
-      }
-    });
-    if (theme.floorTexB && theme.wallTexB) {
-      tryLoadRuntimeCaveTex(theme.floorTexB, function (tex) {
-        dirtTexB = tex;
-        if (floorMeshB && floorMeshB.material) {
-          floorMeshB.material.map = tex;
-          floorMeshB.material.needsUpdate = true;
-        }
-      }, function () {
-        dirtTexB = makeSeamlessTex(256, 77, theme.palFloor);
-        if (floorMeshB && floorMeshB.material) {
-          floorMeshB.material.map = dirtTexB;
-          floorMeshB.material.needsUpdate = true;
-        }
-      });
-      tryLoadRuntimeCaveTex(theme.wallTexB, function (tex) {
-        rockTexB = tex;
-        if (wallMeshB && wallMeshB.material) {
-          wallMeshB.material.map = tex;
-          wallMeshB.material.needsUpdate = true;
-        }
-      }, function () {
-        rockTexB = makeSeamlessTex(256, 91, theme.palWall);
-        if (wallMeshB && wallMeshB.material) {
-          wallMeshB.material.map = rockTexB;
-          wallMeshB.material.needsUpdate = true;
-        }
-      });
-    }
+    // Each material has a designed visual vocabulary, not merely a recolored noise.
+    if (!terrainTextures[theme.id]) terrainTextures[theme.id] = [
+      paintedTerrain(theme, false, false), paintedTerrain(theme, true, false),
+      paintedTerrain(theme, false, true), paintedTerrain(theme, true, true),
+    ];
+    [dirtTex, rockTex, dirtTexB, rockTexB] = terrainTextures[theme.id];
   }
 
-  function tryLoadRuntimeCaveTex(name, onReady, onError) {
-    // Prefer sprites.texture (handles PNG + painter fallback); clone settings for tiling
-    if (MD.sprites && typeof MD.sprites.texture === "function") {
-      const base = MD.sprites.texture(name);
-      if (base) {
-        base.wrapS = THREE.RepeatWrapping;
-        base.wrapT = THREE.RepeatWrapping;
-        base.generateMipmaps = true;
-        base.minFilter = THREE.LinearMipmapLinearFilter;
-        base.magFilter = THREE.LinearFilter;
-        base.needsUpdate = true;
-        if (onReady) onReady(base);
-        if (MD.sprites.ready) {
-          MD.sprites.ready.then(function () {
-            if (onReady) onReady(base);
-          });
-        }
-        return;
-      }
+  // Painted materials are authored at three scales: broad color masses, readable
+  // construction/organic shapes, then small brush marks. Their world-space UVs
+  // continue across cells, so the gameplay grid never becomes the artwork.
+  function materialTexture(canvas) {
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  function paintedTerrain(theme, wall, alternate) {
+    const size = 512, env = theme.environment;
+    const canvas = document.createElement("canvas"); canvas.width = canvas.height = size;
+    const g = canvas.getContext("2d"), seed = 71 + (alternate ? 137 : 0) + (wall ? 311 : 0);
+    const rgb = hex => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
+    const base = rgb(wall ? env.stone : env.ground);
+    const image = g.createImageData(size, size);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      const broad = Math.sin(u * Math.PI * 4 + Math.sin(v * Math.PI * 2) * 1.8) * Math.cos(v * Math.PI * 4 + 0.7);
+      const grain = (hash01(x + seed, y + seed) - 0.5) * 9;
+      const shade = broad * (theme.id === "forest" ? 13 : 7) + grain;
+      const i = (y * size + x) * 4;
+      image.data[i] = clamp(base[0] + shade, 0, 255);
+      image.data[i + 1] = clamp(base[1] + shade * 0.8, 0, 255);
+      image.data[i + 2] = clamp(base[2] + shade * 0.55, 0, 255);
+      image.data[i + 3] = 255;
     }
-    const path = "assets/runtime/" + name + ".png";
-    const loader = new THREE.TextureLoader();
-    loader.load(
-      path,
-      function (tex) {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.RepeatWrapping;
-        tex.generateMipmaps = true;
-        tex.minFilter = THREE.LinearMipmapLinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.needsUpdate = true;
-        if (onReady) onReady(tex);
-      },
-      undefined,
-      function () { if (onError) onError(); }
-    );
+    g.putImageData(image, 0, 0);
+    const R = (i, j) => hash01(i * 13 + seed, j * 17 + seed);
+    const ellipse = (x,y,rx,ry,angle,color) => { g.fillStyle=color; g.beginPath(); g.ellipse(x,y,rx,ry,angle,0,Math.PI*2); g.fill(); };
+    const line = (points,color,width) => { g.strokeStyle=color; g.lineWidth=width; g.lineCap="round"; g.beginPath(); points.forEach((p,i)=>i?g.lineTo(...p):g.moveTo(...p)); g.stroke(); };
+    if (theme.id === "forest") {
+      // Deliberately clustered meadow, not a uniform confetti/noise fill.
+      for (let i=0;i<46;i++) {
+        const x=R(i,1)*size,y=R(i,2)*size,r=16+R(i,3)*56;
+        ellipse(x,y,r,r*0.53,R(i,4)*3,wall?"rgba(101,72,34,.13)":i%3?"rgba(81,139,46,.14)":"rgba(246,221,151,.35)");
+      }
+      for (let i=0;i<760;i++) {
+        const x=R(i,5)*size,y=R(i,6)*size,patch=noise2(x/65+seed,y/65);
+        if (patch<0.42) continue;
+        const length=3+R(i,7)*8;
+        line([[x-3,y+2],[x,y-length],[x+1,y+1],[x+5,y-length*0.65]],i%3?"rgba(75,122,39,.50)":"rgba(232,240,151,.75)",1.6);
+        if (i%13===0) {
+          ellipse(x,y,3.2,1.8,-0.6,"#e7c372"); ellipse(x+2,y-4,2,3,0.3,"#7d9f46");
+        }
+        if (!wall && i%29===0) {
+          for(let k=0;k<5;k++) ellipse(x+Math.cos(k*1.256)*3,y+Math.sin(k*1.256)*3,2.3,1.4,k*1.256,i%2?"#fff0b1":"#e8b9cc");
+          ellipse(x,y,1.7,1.7,0,"#d29840");
+        }
+      }
+    } else if (theme.id === "wooden") {
+      // Staggered tongue-and-groove boards with knots, endgrain and warm wear.
+      const rows=wall?5:8, height=size/rows;
+      for(let row=0;row<rows;row++) {
+        const y=row*height;
+        g.fillStyle=row%3===0?"rgba(115,62,28,.10)":"rgba(255,218,151,.13)"; g.fillRect(0,y,size,height-2);
+        line([[0,y+height-1],[size,y+height-1]],"rgba(111,66,34,.49)",2.2);
+        line([[0,y+3],[size,y+3]],"rgba(255,226,165,.52)",1.5);
+        const joint=(row%2?0.3:0.76)*size;
+        line([[joint,y+3],[joint,y+height-3]],"rgba(104,62,30,.48)",2);
+        for(let k=0;k<10;k++) {
+          const gy=y+6+R(row,k)*Math.max(6,height-12),start=R(k,row)*size;
+          line([[start,gy],[start+24,gy-2],[start+57,gy+1],[start+104,gy]],"rgba(125,75,36,.17)",1.2);
+        }
+        const knotX=R(row,50)*size;
+        ellipse(knotX,y+height*0.48,9,3,0,"rgba(103,57,28,.30)");
+        line([[knotX-21,y+height*0.48],[knotX-7,y+height*0.37],[knotX+13,y+height*0.39],[knotX+26,y+height*0.48]],"rgba(118,64,27,.29)",1.2);
+      }
+    } else if (["modern","cyber","future"].includes(theme.id)) {
+      const cyber=theme.id==="cyber", future=theme.id==="future", step=wall?128:256;
+      for(let y=0;y<size;y+=step) for(let x=0;x<size;x+=step) {
+        g.fillStyle=cyber?"rgba(38,49,91,.27)":"rgba(71,123,144,.10)"; g.fillRect(x+5,y+5,step-10,step-10);
+        g.fillStyle=cyber?"rgba(157,171,214,.18)":"rgba(247,254,238,.28)"; g.fillRect(x+8,y+8,step-16,step-18);
+        line([[x+1,y+step-1],[x+step-1,y+step-1],[x+step-1,y+1]],cyber?"rgba(33,34,72,.55)":"rgba(88,131,151,.37)",2);
+        const corner=15;
+        for(const a of [[corner,corner],[step-corner,corner],[corner,step-corner],[step-corner,step-corner]]) ellipse(x+a[0],y+a[1],2.2,2.2,0,cyber?"#7c95b7":"#8aacb2");
+        if(cyber) {
+          line([[x+23,y+41],[x+62,y+41],[x+77,y+57],[x+77,y+91]],"rgba(77,224,225,.58)",3);
+          line([[x+step-24,y+step-35],[x+step-73,y+step-35]],"rgba(238,142,212,.75)",4);
+        } else if(future) {
+          g.fillStyle="rgba(77,174,165,.30)"; g.fillRect(x+step*0.25,y+step-14,step*0.5,5);
+          for(let k=0;k<3;k++) { g.fillStyle="rgba(222,164,86,.52)"; g.fillRect(x+17+k*7,y+19,4,8); }
+        } else if((x+y)%512===0) {
+          for(let k=0;k<4;k++) line([[x+21+k*7,y+step-33],[x+25+k*7,y+step-22]],"rgba(80,131,146,.32)",2);
+        }
+      }
+    } else {
+      const wet=theme.id==="wetcave", ruin=theme.id==="ruins";
+      if(ruin) {
+        const stepY=ruin?128:96;
+        for(let row=-1;row<6;row++) for(let col=-1;col<5;col++) {
+          const x=col*168+(row%2)*84,y=row*stepY;
+          g.fillStyle=(row+col)%3?"rgba(245,233,205,.13)":"rgba(79,80,96,.10)";
+          g.fillRect(x+3,y+3,161,stepY-6);
+          line([[x+4,y+stepY-3],[x+165,y+stepY-3],[x+165,y+4]],ruin?"rgba(136,108,70,.35)":"rgba(69,66,97,.22)",2.5);
+          line([[x+8,y+5],[x+159,y+5]],"rgba(255,238,204,.28)",2);
+        }
+      }
+      if(wall && !ruin) for(let i=0;i<9;i++) {
+        const y=i*61+(i%2)*11;
+        line([[-10,y],[70,y+7],[147,y-6],[235,y+9],[326,y-4],[419,y+5],[522,y]],wet?"rgba(64,116,137,.24)":"rgba(93,70,121,.24)",3+(i%3)*2);
+        line([[-10,y-4],[70,y+3],[147,y-10],[235,y+5],[326,y-8],[419,y+1],[522,y-4]],"rgba(241,229,215,.25)",2);
+      }
+      for(let i=0;i<(wall?100:200);i++) {
+        const x=R(i,1)*size,y=R(i,2)*size,r=2+R(i,3)*(wall?8:11);
+        ellipse(x,y,r,r*(0.4+R(i,4)*0.4),R(i,5)*3,wet?i%3?"rgba(82,159,167,.22)":"rgba(216,238,223,.40)":i%3?"rgba(138,107,87,.18)":"rgba(255,235,188,.5)");
+        if(i%7===0) line([[x-r*0.6,y-r*0.3],[x+r*0.3,y-r*0.35]],"rgba(255,245,208,.36)",1.5);
+        if(i%23===0) line([[x,y],[x+9,y+8],[x+18,y+5],[x+25,y+13]],wet?"rgba(53,124,139,.20)":"rgba(111,87,93,.24)",1.5);
+      }
+      if(wet) for(let i=0;i<15;i++) {
+        const x=R(i,41)*size,y=R(i,42)*size;
+        ellipse(x,y,17+R(i,44)*27,7+R(i,45)*12,R(i,43)*3,"rgba(41,173,174,.24)");
+        line([[x-9,y-4],[x+8,y-5]],"rgba(198,246,232,.57)",2);
+      }
+      if(ruin) for(let i=0;i<28;i++) ellipse(R(i,91)*size,R(i,92)*size,11+R(i,93)*14,5+R(i,94)*7,0.4,"rgba(102,144,82,.23)");
+    }
+    return materialTexture(canvas);
+  }
+
+  let volumeTexture = null;
+  const FINISH = { stone:0, foliage:1, wood:2, panel:3, plain:4, water:5, blossom:6, metal:7 };
+  function volumeAtlas() {
+    if(volumeTexture) return volumeTexture;
+    const size=1024, cell=256, canvas=document.createElement("canvas"); canvas.width=canvas.height=size;
+    const g=canvas.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,size,size);
+    for(const [name,slot] of Object.entries(FINISH)) {
+      const ox=(slot%4)*cell,oy=Math.floor(slot/4)*cell;
+      g.save(); g.translate(ox,oy); g.beginPath(); g.rect(0,0,cell,cell); g.clip();
+      g.fillStyle="#eef0e6"; g.fillRect(0,0,cell,cell);
+      for(let i=0;i<150;i++) {
+        const x=hash01(i+slot*43,7)*cell,y=hash01(i+slot*13,23)*cell;
+        g.fillStyle=i%3?"rgba(255,255,246,.14)":"rgba(42,49,42,.08)";
+        g.beginPath(); g.ellipse(x,y,4+hash01(i,13)*14,3+hash01(i,16)*8,hash01(i,17)*3,0,Math.PI*2);g.fill();
+      }
+      if(name==="foliage") for(let i=0;i<150;i++) {
+        const x=hash01(i+47,52)*cell,y=hash01(i+18,93)*cell,a=hash01(i,82)*6;
+        g.fillStyle=i%4===0?"#fbf4bb":i%3===0?"#c0ceaa":"#e0e8c8";
+        g.beginPath();g.ellipse(x,y,5+hash01(i,29)*7,2.8,a,0,Math.PI*2);g.fill();
+        g.strokeStyle="rgba(78,104,59,.18)";g.lineWidth=1;g.beginPath();g.moveTo(x-3*Math.cos(a),y-3*Math.sin(a));g.lineTo(x+4*Math.cos(a),y+4*Math.sin(a));g.stroke();
+      }
+      if(name==="wood") for(let i=0;i<44;i++) {
+        const x=hash01(i,16)*cell;
+        g.strokeStyle=i%3?"rgba(69,43,26,.23)":"rgba(255,245,211,.47)";g.lineWidth=1+hash01(i,32)*3;
+        g.beginPath();g.moveTo(x,-3);g.bezierCurveTo(x+12,70,x-9,180,x+3,260);g.stroke();
+      }
+      if(name==="stone") for(let i=0;i<16;i++) {
+        const x=hash01(i+7,14)*cell,y=hash01(i+12,24)*cell;
+        g.strokeStyle="rgba(75,68,90,.16)";g.lineWidth=1.5;g.beginPath();g.moveTo(x,y);g.lineTo(x+15,y+9);g.lineTo(x+28,y+5);g.stroke();
+      }
+      if(name==="panel" || name==="metal") {
+        g.fillStyle="rgba(43,61,81,.13)";g.fillRect(22,23,212,8);g.fillRect(22,223,212,6);
+        for(let k=0;k<5;k++){g.fillStyle="rgba(56,68,81,.19)";g.fillRect(36,47+k*14,90,5);}
+        for(const [x,y] of [[17,16],[239,16],[17,240],[239,240]]){g.fillStyle="#8eaaa7";g.beginPath();g.arc(x,y,3.5,0,Math.PI*2);g.fill();}
+      }
+      if(name==="water") {g.fillStyle="rgba(255,255,255,.6)";g.fillRect(49,89,55,3);g.fillRect(88,121,81,3);}
+      g.restore();
+    }
+    volumeTexture=materialTexture(canvas); volumeTexture.wrapS=volumeTexture.wrapT=THREE.ClampToEdgeWrapping;
+    return volumeTexture;
   }
 
   function makeSeamlessTex(size, seed, palette) {
@@ -418,9 +501,9 @@
         const n = wrapNoise(x, y, 6) * 0.55 + wrapNoise(x, y, 14) * 0.28 + wrapNoise(x, y, 32) * 0.17;
         const k = n - 0.5;
         const i = (y * p + x) * 4;
-        d[i] = clamp(palette[0] + k * 48 + (hash01(x + seed, y) - 0.5) * 10, 0, 255) | 0;
-        d[i + 1] = clamp(palette[1] + k * 42 + (hash01(x, y + seed) - 0.5) * 10, 0, 255) | 0;
-        d[i + 2] = clamp(palette[2] + k * 36 + (hash01(x + y, seed) - 0.5) * 8, 0, 255) | 0;
+        d[i] = clamp(palette[0] + k * 22 + (hash01(x + seed, y) - 0.5) * 10, 0, 255) | 0;
+        d[i + 1] = clamp(palette[1] + k * 20 + (hash01(x, y + seed) - 0.5) * 10, 0, 255) | 0;
+        d[i + 2] = clamp(palette[2] + k * 18 + (hash01(x + y, seed) - 0.5) * 8, 0, 255) | 0;
         d[i + 3] = 255;
       }
     }
@@ -702,12 +785,13 @@
     disposeMesh(wallMesh);
     disposeMesh(floorMeshB);
     disposeMesh(wallMeshB);
-    disposeMesh(edgeMesh);
-    disposeMesh(paperDetailMesh);
+    disposeMesh(surfaceMesh);
+    disposeMesh(environmentMesh);
     floorMesh = wallMesh = null;
-    floorMeshB = wallMeshB = edgeMesh = paperDetailMesh = null;
-    paperDetailMeta = [];
-    edgeMeta = [];
+    floorMeshB = wallMeshB = surfaceMesh = environmentMesh = null;
+    environmentMeta = [];
+    surfaceMeta = [];
+    environmentStats = { primitiveCounts: {}, landmarkCounts: {} };
     floorMeta = [];
     wallMeta = [];
     floorMetaB = [];
@@ -810,43 +894,26 @@
   function wz(vj) { return vj - 0.5; }
 
   function floorH(vi, vj, map) {
-    let y = (fbm(vi * 0.82, vj * 0.82) - 0.5) * 0.068;
-    if (map.stairs) {
-      const dx = wx(vi) - map.stairs.x;
-      const dz = wz(vj) - map.stairs.y;
-      const d = Math.hypot(dx, dz);
-      if (d < 1.5) {
-        const t = 1 - d / 1.5;
-        y -= 0.06 * t * t;
-      }
-    }
-    return y;
+    return (fbm(vi * 0.68, vj * 0.68) - 0.45) * environment().floorRelief;
   }
 
   function wallH(vi, vj) {
-    return 0.92 + fbm(vi * 0.47 + 11.2, vj * 0.47 + 4.8) * 0.78;
+    const e = environment();
+    const broad = fbm(vi * 0.42 + 11.2, vj * 0.42 + 4.8);
+    if (e.form === "broken-masonry") return e.height + Math.floor(broad * 4) * 0.09;
+    return e.height + broad * e.relief;
   }
 
   function plateauJitter(map, vi, vj) {
-    let ox = 0, oz = 0, n = 0;
-    const cells = [[vi - 1, vj - 1], [vi, vj - 1], [vi - 1, vj], [vi, vj]];
-    for (let i = 0; i < 4; i++) {
-      const cx = cells[i][0], cy = cells[i][1];
-      if (isFloor(map, cx, cy)) {
-        ox += wx(vi) - cx;
-        oz += wz(vj) - cy;
-        n++;
-      }
-    }
-    if (n === 0) {
-      return {
-        x: (hash01(vi, vj + 40) - 0.5) * 0.14,
-        z: (hash01(vi + 7, vj) - 0.5) * 0.14,
-      };
+    const e = environment();
+    let ox = 0, oz = 0;
+    for (const cell of [[vi - 1, vj - 1], [vi, vj - 1], [vi - 1, vj], [vi, vj]]) {
+      if (isFloor(map, cell[0], cell[1])) { ox += wx(vi) - cell[0]; oz += wz(vj) - cell[1]; }
     }
     const len = Math.hypot(ox, oz) || 1;
-    const amt = hash01(vi, vj + 99) * 0.12;
-    return { x: (ox / len) * amt, z: (oz / len) * amt };
+    // Retreat into wall cells. Never narrow a traversable tile with geometry.
+    const amt = e.inset * (e.relief ? 0.45 + hash01(vi, vj + 99) * 0.55 : 1);
+    return { x: ox / len * amt, z: oz / len * amt };
   }
 
   function floorCellsAt(map, vi, vj) {
@@ -883,298 +950,366 @@
     });
   }
 
-  function addRockLump(builder, x, y, z, seed, meta) {
-    const geo = new THREE.IcosahedronGeometry(0.16 + hash01(seed, 1) * 0.12, 0);
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-      hash01(seed, 2) * 2.2,
-      hash01(seed, 3) * 6.2,
-      hash01(seed, 4) * 1.6
-    ));
-    const sc = new THREE.Vector3(
-      0.65 + hash01(seed, 5) * 0.9,
-      0.4 + hash01(seed, 6) * 0.85,
-      0.65 + hash01(seed, 7) * 0.9
-    );
-    m.compose(new THREE.Vector3(x, y, z), q, sc);
-    geo.applyMatrix4(m);
-    builder.appendGeo(geo, meta, true);
-    geo.dispose();
-  }
-
-  function addBoxLump(builder, x, y, z, seed, meta) {
-    const geo = new THREE.BoxGeometry(
-      0.22 + hash01(seed, 8) * 0.28,
-      0.18 + hash01(seed, 9) * 0.32,
-      0.22 + hash01(seed, 10) * 0.28
-    );
-    geo.rotateY(hash01(seed, 11) * Math.PI);
-    geo.translate(x, y, z);
-    builder.appendGeo(geo, meta, true);
-    geo.dispose();
+  // Reused primitive templates are transformed directly into two merged batches.
+  // No scene node per rock/post/pipe and no allocation in the render loop.
+  const solids = Object.create(null);
+  function addSolid(builder, shape, position, scale, rotation, meta) {
+    environmentStats.primitiveCounts[shape] = (environmentStats.primitiveCounts[shape] || 0) + 1;
+    if (!solids[shape]) {
+      solids[shape] = shape === "rock" ? new THREE.IcosahedronGeometry(0.5, 0)
+        : shape === "round" ? new THREE.SphereGeometry(0.5, 7, 4)
+        : shape === "bud" ? new THREE.SphereGeometry(0.5, 5, 2)
+        : shape === "shrub" ? new THREE.SphereGeometry(0.5, 7, 3)
+        : shape === "leafball" ? new THREE.SphereGeometry(0.5, 8, 4)
+        : shape === "crystal" ? new THREE.CylinderGeometry(0.015, 0.5, 1, 5)
+        : shape === "column" ? new THREE.CylinderGeometry(0.5, 0.5, 1, 8)
+        : shape === "cone" ? new THREE.CylinderGeometry(0.12, 0.5, 1, 7)
+        : new THREE.BoxGeometry(1, 1, 1);
+    }
+    const geo = solids[shape], p = geo.attributes.position, uv = geo.attributes.uv;
+    const base = builder.meta.length;
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(...position),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rotation || [0, 0, 0]))), new THREE.Vector3(...scale));
+    const point = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      point.fromBufferAttribute(p, i).applyMatrix4(matrix);
+      const slot = FINISH[meta.finish || "stone"] || 0;
+      const u = uv ? uv.getX(i) : 0, v = uv ? uv.getY(i) : 0;
+      builder.vert(point.x, point.y, point.z, ((slot % 4) + 0.018 + u * 0.964) / 4,
+        1 - (Math.floor(slot / 4) + 0.982 - v * 0.964) / 4, meta);
+    }
+    if (geo.index) for (let i = 0; i < geo.index.count; i += 3) builder.tri(base + geo.index.getX(i), base + geo.index.getX(i + 1), base + geo.index.getX(i + 2));
+    else for (let i = 0; i < p.count; i += 3) builder.tri(base + i, base + i + 1, base + i + 2);
   }
 
   function rebuildMap(map) {
     clearMap();
     if (!map) return;
-    const w = map.width, h = map.height;
-    const th = currentTheme || {};
-    const hasB = !!(th.floorTexB && th.wallTexB);
-    const fb = new Builder();
-    const fbB = hasB ? new Builder() : null;
-    const wb = new Builder();
-    const wbB = hasB ? new Builder() : null;
-    const eb = (th.edge && th.edge.colors) ? new Builder() : null;
-    const pb = new Builder();
-    const art = paperStyle();
-    const floorIdxA = new Map();
-    const floorIdxB = new Map();
-    const platIdxA = new Map();
-    const platIdxB = new Map();
-
-    // low-frequency noise splits floor/wall tiles into organic A/B patches
-    function floorVar(x, y) { return hasB && fbm(x * 0.33 + 7.3, y * 0.33 + 2.9) > 0.6; }
-    function wallVar(x, y) { return hasB && fbm(x * 0.29 + 11.7, y * 0.29 + 5.1) > 0.62; }
+    const w = map.width, h = map.height, th = currentTheme || MD.THEMES[0], env = environment();
+    const fb = new Builder(), fbB = new Builder(), wb = new Builder(), wbB = new Builder();
+    const structures = new Builder(), surfaces = new Builder();
+    const floorIndices = [new Map(), new Map()], wallIndices = [new Map(), new Map()];
+    const dressedWalls = new Set();
+    function landmark(name) { environmentStats.landmarkCounts[name] = (environmentStats.landmarkCounts[name] || 0) + 1; }
+    function floorVar(x, y) { return fbm(x * 0.22 + 7.3, y * 0.22 + 2.9) > 0.46 ? 1 : 0; }
+    function wallVar(x, y) { return fbm(x * 0.27 + 11.7, y * 0.27 + 5.1) > 0.51 ? 1 : 0; }
     function F(v) { return v ? fbB : fb; }
     function W(v) { return v ? wbB : wb; }
-    function FI(v) { return v ? floorIdxB : floorIdxA; }
-    function PI(v) { return v ? platIdxB : platIdxA; }
-
-    function getFloorVert(vi, vj, varB) {
-      const idx = FI(varB);
-      const k = vi + "," + vj;
-      if (idx.has(k)) return idx.get(k);
-      const x = wx(vi), z = wz(vj);
-      const y = floorH(vi, vj, map);
-      const idxv = F(varB).vert(x, y, z, x * UV_SCALE, z * UV_SCALE, { kind: "floor", cells: floorCellsAt(map, vi, vj) });
-      idx.set(k, idxv);
-      return idxv;
+    function metaFor(x, y, color, tone, finish) {
+      return { kind: "environment", cells: [{ x, y, room: isRoom(map, x, y) }], surfaceColor: new THREE.Color(color), tone: tone == null ? 1 : tone, finish: finish || "stone" };
     }
-
-    function getPlatVert(vi, vj, varB) {
-      const idx = PI(varB);
-      const k = vi + "," + vj;
-      if (idx.has(k)) return idx.get(k);
-      const j = plateauJitter(map, vi, vj);
-      const x = wx(vi) + j.x;
-      const z = wz(vj) + j.z;
-      const y = wallH(vi, vj);
-      const idxv = W(varB).vert(x, y, z, x * UV_SCALE, z * UV_SCALE, { kind: "wall", cells: wallCellsAt(map, vi, vj) });
-      idx.set(k, idxv);
-      return idxv;
+    function floorVertex(x, y, v) {
+      const key = x + "," + y, cache = floorIndices[v];
+      if (!cache.has(key)) cache.set(key, F(v).vert(wx(x), floorH(x, y, map), wz(y), x * UV_SCALE, y * UV_SCALE, { kind: "floor", cells: floorCellsAt(map, x, y) }));
+      return cache.get(key);
     }
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!isFloor(map, x, y)) continue;
-        const vb = floorVar(x, y);
-        const sw = getFloorVert(x, y, vb);
-        const se = getFloorVert(x + 1, y, vb);
-        const ne = getFloorVert(x + 1, y + 1, vb);
-        const nw = getFloorVert(x, y + 1, vb);
-        F(vb).quad(sw, nw, ne, se);
+    function wallPosition(x, y) {
+      const j = plateauJitter(map, x, y);
+      return { x: wx(x) + j.x, y: wallH(x, y), z: wz(y) + j.z };
+    }
+    function wallVertex(x, y, v) {
+      const key = x + "," + y, cache = wallIndices[v], p = wallPosition(x, y);
+      if (!cache.has(key)) cache.set(key, W(v).vert(p.x, p.y, p.z, x * UV_SCALE, y * UV_SCALE, { kind: "wall", cells: wallCellsAt(map, x, y), tone: 0.83 }));
+      return cache.get(key);
+    }
+    function nearFloor(x, y) {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isFloor(map, x + dx, y + dy)) return true;
+      return false;
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (isFloor(map, x, y)) {
+        const v = floorVar(x, y);
+        F(v).quad(floorVertex(x, y, v), floorVertex(x, y + 1, v), floorVertex(x + 1, y + 1, v), floorVertex(x + 1, y, v));
+      } else if (nearFloor(x, y)) {
+        // Only a one-tile cutaway shell is rendered; deep solid walls no longer
+        // become a giant featureless platform covering most of the screen.
+        const v = wallVar(x, y);
+        W(v).quad(wallVertex(x, y, v), wallVertex(x, y + 1, v), wallVertex(x + 1, y + 1, v), wallVertex(x + 1, y, v));
       }
     }
 
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (map.tiles[y][x] !== MD.TILE.WALL) continue;
-        const vb = wallVar(x, y);
-        const sw = getPlatVert(x, y, vb);
-        const se = getPlatVert(x + 1, y, vb);
-        const ne = getPlatVert(x + 1, y + 1, vb);
-        const nw = getPlatVert(x, y + 1, vb);
-        // flat top over shared corner heights -> walls read as one continuous
-        // terrain instead of a grid of separate pyramids
-        W(vb).quad(sw, nw, ne, se);
-      }
-    }
-
-    function platPos(b, i) {
-      return { x: b.pos[i * 3], y: b.pos[i * 3 + 1], z: b.pos[i * 3 + 2] };
-    }
-
-    function paperQuad(points, color, cells, tone) {
-      const meta = { kind: "paper", cells: cells, paperColor: new THREE.Color(color), tone: tone == null ? 1 : tone };
-      const idx = points.map(p => pb.vert(p.x, p.y, p.z, 0, 0, meta));
-      pb.quad(idx[0], idx[1], idx[2], idx[3]);
-    }
-
-    function addCliff(v0i, v0j, v1i, v1j, wallX, wallY, floorX, floorY) {
-      const vb = wallVar(wallX, wallY);
-      const builder = W(vb);
-      const top0 = platPos(builder, getPlatVert(v0i, v0j, vb));
-      const top1 = platPos(builder, getPlatVert(v1i, v1j, vb));
-      const bottom0 = { x: wx(v0i), y: floorH(v0i, v0j, map) - 0.025, z: wz(v0j) };
-      const bottom1 = { x: wx(v1i), y: floorH(v1i, v1j, map) - 0.025, z: wz(v1j) };
-      const nx = -(v1j - v0j), nz = v1i - v0i;
+    function facade(ax, ay, bx, by, wallX, wallY, floorX, floorY) {
+      const top0 = wallPosition(ax, ay), top1 = wallPosition(bx, by);
+      const nx = -(by - ay), nz = bx - ax, tx = bx - ax, tz = by - ay;
+      const n = hash01(wallX * 31 + ax, wallY * 23 + by);
+      const builder = W(wallVar(wallX, wallY));
       const cells = [{ x: wallX, y: wallY, room: false }];
-      const floorCells = [{ x: floorX, y: floorY, room: isRoom(map, floorX, floorY) }];
-      const levels = [0, 0.43, 0.9, 1];
-      function lerp(bottom, top, t) {
-        const bevel = t === 0.9 ? 0.018 : 0;
-        return { x: bottom.x + (top.x - bottom.x) * t + nx * bevel,
-          y: bottom.y + (top.y - bottom.y) * t,
-          z: bottom.z + (top.z - bottom.z) * t + nz * bevel };
+      // Broad changes of cross-section make actual shelves, erosion, banks or
+      // sloped cabin panels. No thin stripe is added to any boundary.
+      const levels = env.form === "rootbank" ? [0, 0.22, 0.64, 1]
+        : env.form === "pressure-shells" ? [0, 0.18, 0.78, 1]
+        : env.form === "karst" ? [0, 0.24, 0.57, 0.83, 1]
+        : env.form === "strata" ? [0, 0.30, 0.62, 1] : [0, 0.14, 0.86, 1];
+      const across = env.form === "karst" || env.form === "strata" ? 3 : 1;
+      function point(u, t) {
+        const baseX = wx(ax) + tx * u, baseZ = wz(ay) + tz * u;
+        const topX = top0.x + (top1.x - top0.x) * u, topZ = top0.z + (top1.z - top0.z) * u;
+        let depth = 0;
+        if (env.form === "strata") depth = t === 0.3 ? 0.11 + n * 0.05 : t === 0.62 ? 0.025 : 0;
+        if (env.form === "karst") depth = Math.sin(Math.PI * t) * (0.12 + Math.sin(u * Math.PI) * 0.15);
+        if (env.form === "rootbank") depth = Math.sin(Math.PI * t * 0.75) * 0.13;
+        if (env.form === "broken-masonry") depth = t > 0 && t < 1 ? 0.22 : 0;
+        if (env.form === "timber-bays" || env.form === "service-bays") depth = t > 0 && t < 1 ? 0.21 : 0;
+        if (env.form === "utility-stacks") depth = t > 0 && t < 1 ? 0.29 : 0;
+        if (env.form === "pressure-shells") depth = t === 0.18 || t === 0.78 ? 0.22 : 0.09;
+        // Every facade shares its endpoint profile with its neighbour. The old
+        // normal-offset endpoints opened bright cracks at concave room corners.
+        depth *= Math.sin(Math.PI * u);
+        return { x: baseX + (topX - baseX) * t - nx * depth, y: -0.02 + (top0.y + (top1.y - top0.y) * u + 0.02) * t, z: baseZ + (topZ - baseZ) * t - nz * depth };
       }
-      // Separate side vertices prevent the top normals from rounding the cut.
-      // Face-space UVs fix the old stretched texture on north/south vs east/west walls.
-      for (let row = 0; row < levels.length - 1; row++) {
-        const lo = levels[row], hi = levels[row + 1];
-        const q = [lerp(bottom0, top0, lo), lerp(bottom1, top1, lo), lerp(bottom1, top1, hi), lerp(bottom0, top0, hi)];
-        const shade = [0.72, 0.88, 1.04][row];
-        const meta = { kind: "wall", cells: cells, tone: shade };
-        const ids = q.map((p, i) => builder.vert(p.x, p.y, p.z,
-          ((v1i !== v0i) ? p.x : p.z) * UV_SCALE, p.y * UV_SCALE, meta));
-        builder.quad(ids[0], ids[1], ids[2], ids[3]);
+      for (let row = 0; row < levels.length - 1; row++) for (let col = 0; col < across; col++) {
+        const u = col / across, v = (col + 1) / across;
+        const points = [point(u, levels[row]), point(v, levels[row]), point(v, levels[row + 1]), point(u, levels[row + 1])];
+        const meta = { kind: "wall", cells, tone: row === 0 ? 0.80 : 0.95 };
+        const ids = points.map(p => builder.vert(p.x, p.y, p.z, (tx ? p.x : p.z) * UV_SCALE, p.y * UV_SCALE, meta));
+        builder.quad(...ids);
       }
-      // A narrow cream paper cut at the top, with a darker laminated underside.
-      const inset = 0.055;
-      paperQuad([
-        { x: top0.x, y: top0.y + 0.009, z: top0.z },
-        { x: top1.x, y: top1.y + 0.009, z: top1.z },
-        { x: top1.x - nx * inset, y: top1.y + 0.012, z: top1.z - nz * inset },
-        { x: top0.x - nx * inset, y: top0.y + 0.012, z: top0.z - nz * inset },
-      ], art.rim, cells, 0.86);
-      const side0 = lerp(bottom0, top0, 0.87), side1 = lerp(bottom1, top1, 0.87);
-      const side2 = lerp(bottom1, top1, 0.895), side3 = lerp(bottom0, top0, 0.895);
-      for (const p of [side0, side1, side2, side3]) { p.x += nx * 0.008; p.z += nz * 0.008; }
-      paperQuad([side0, side1, side2, side3], art.ink, cells, 0.7);
-      // Contact shadow is confined to the wall edge, leaving the playable centre clear.
-      paperQuad([
-        { x: bottom0.x, y: bottom0.y + 0.036, z: bottom0.z },
-        { x: bottom1.x, y: bottom1.y + 0.036, z: bottom1.z },
-        { x: bottom1.x + nx * 0.10, y: bottom1.y + 0.038, z: bottom1.z + nz * 0.10 },
-        { x: bottom0.x + nx * 0.10, y: bottom0.y + 0.038, z: bottom0.z + nz * 0.10 },
-      ], art.ink, floorCells, 0.62);
-      if (th.edge && eb) {
-        const color = new THREE.Color(th.edge.colors[Math.floor(hash01(wallX * 5, wallY * 11) * th.edge.colors.length) % th.edge.colors.length]);
-        const meta = { kind: "paper", cells: cells, paperColor: color };
-        const q = [lerp(bottom0, top0, 0.08), lerp(bottom1, top1, 0.08), lerp(bottom1, top1, 0.13), lerp(bottom0, top0, 0.13)];
-        const ids = q.map(p => eb.vert(p.x + nx * 0.01, p.y, p.z + nz * 0.01, 0, 0, meta));
-        eb.quad(ids[0], ids[1], ids[2], ids[3]);
+      const cx = (wx(ax) + wx(bx)) / 2, cz = (wz(ay) + wz(by)) / 2;
+      const height = (top0.y + top1.y) / 2;
+      const rotation = [0, Math.atan2(tx, tz) - Math.PI / 2, 0];
+      const organic = ["rootbank", "broken-masonry", "karst", "strata"].includes(env.form);
+      const finish = organic ? "stone" : env.form === "timber-bays" ? "wood" : "panel";
+      const stone = metaFor(wallX, wallY, env.stone, 1, finish);
+      const secondary = metaFor(wallX, wallY, env.secondary, 1, env.form === "rootbank" ? "wood" : finish);
+      const accent = metaFor(wallX, wallY, env.accent, 1, env.form === "rootbank" || env.form === "broken-masonry" ? "foliage" : env.form === "karst" ? "water" : finish);
+      const detail = metaFor(wallX, wallY, env.detail, 1, "plain");
+      const foliage = metaFor(wallX, wallY, 0x7eba83, 1, "foliage");
+      function solid(shape, along, depth, y, sx, sy, sz, material, turn, lean, wide) {
+        const angle = turn || 0, tilt = lean || 0;
+        // Crowns may bridge consecutive solid bank cells, never a path/corner.
+        const continuous = wide && isWall(map,wallX+tx,wallY+tz) && isWall(map,wallX-tx,wallY-tz)
+          && inMap(map,wallX+tx,wallY+tz) && inMap(map,wallX-tx,wallY-tz);
+        const span = continuous ? 0.73 : 0.48;
+        if(continuous) sx *= 1.4;
+        let tangentRadius = (Math.abs(Math.cos(angle)) * (Math.abs(Math.cos(tilt)) * sx + Math.abs(Math.sin(tilt)) * sy) + Math.abs(Math.sin(angle)) * sz) / 2;
+        let normalRadius = (Math.abs(Math.sin(angle)) * (Math.abs(Math.cos(tilt)) * sx + Math.abs(Math.sin(tilt)) * sy) + Math.abs(Math.cos(angle)) * sz) / 2;
+        const fit = Math.min(1, span / tangentRadius, 0.48 / normalRadius);
+        sx *= fit; sy *= fit; sz *= fit;
+        tangentRadius *= fit; normalRadius *= fit;
+        depth = clamp(depth, normalRadius + 0.015, 0.985 - normalRadius);
+        along = clamp(along, -span + tangentRadius, span - tangentRadius);
+        const rot = rotation.slice(); rot[1] += angle; rot[2] = tilt;
+        addSolid(structures, shape, [cx + tx * along - nx * depth, y, cz + tz * along - nz * depth], [sx, sy, sz], rot, material);
       }
-    }
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!isFloor(map, x, y)) continue;
-        if (isWall(map, x, y - 1)) addCliff(x, y, x + 1, y, x, y - 1, x, y);
-        if (isWall(map, x + 1, y)) addCliff(x + 1, y, x + 1, y + 1, x + 1, y, x, y);
-        if (isWall(map, x, y + 1)) addCliff(x + 1, y + 1, x, y + 1, x, y + 1, x, y);
-        if (isWall(map, x - 1, y)) addCliff(x, y + 1, x, y, x - 1, y, x, y);
-      }
-    }
-
-    function addSkirt(v0i, v0j, v1i, v1j, wallX, wallY) {
-      const vb = wallVar(wallX, wallY);
-      const top0 = getPlatVert(v0i, v0j, vb);
-      const top1 = getPlatVert(v1i, v1j, vb);
-      const meta = { kind: "wall", cells: inMap(map, wallX, wallY) ? [{ x: wallX, y: wallY, room: false }] : [] };
-      const p0 = platPos(W(vb), top0);
-      const p1 = platPos(W(vb), top1);
-      const b0 = W(vb).vert(p0.x, -0.28, p0.z, p0.x * UV_SCALE, 0, meta);
-      const b1 = W(vb).vert(p1.x, -0.28, p1.z, p1.x * UV_SCALE, 0, meta);
-      W(vb).quad(b0, b1, top1, top0);
-    }
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (map.tiles[y][x] !== MD.TILE.WALL) continue;
-        if (x === 0) addSkirt(x, y, x, y + 1, x, y);
-        if (x === w - 1) addSkirt(x + 1, y + 1, x + 1, y, x, y);
-        if (y === 0) addSkirt(x + 1, y, x, y, x, y);
-        if (y === h - 1) addSkirt(x, y + 1, x + 1, y + 1, x, y);
-      }
-    }
-
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!isFloor(map, x, y)) continue;
-        const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-        for (let d = 0; d < 4; d++) {
-          const dx = dirs[d][0], dy = dirs[d][1];
-          const wx_ = x + dx, wy_ = y + dy;
-          if (!inMap(map, wx_, wy_) || map.tiles[wy_][wx_] !== MD.TILE.WALL) continue;
-          const px = dirs[d][1], py = -dirs[d][0];
-          const longWall = isWall(map, wx_ + px, wy_ + py) && isWall(map, wx_ - px, wy_ - py);
-          const n = hash01(x * 3 + dx, y * 5 + dy);
-          if (!(longWall && n > 0.62) && n < 0.84) continue;
-          const meta = { kind: "wall", cells: [{ x: wx_, y: wy_, room: false }] };
-          const lvb = wallVar(wx_, wy_);
-          const lx = x + dx * (0.52 + hash01(x, wy_) * 0.18);
-          const lz = y + dy * (0.52 + hash01(wy_, x) * 0.18);
-          const ly = 0.18 + hash01(x + wy_, 2) * 0.35;
-          addRockLump(W(lvb), lx, ly, lz, x * 17 + y * 13 + d, meta);
-          if (n > 0.9) addBoxLump(W(lvb), lx + (hash01(d, x) - 0.5) * 0.16, ly * 0.7, lz + (hash01(y, d) - 0.5) * 0.16, x + y + d, meta);
+      const wallKey = wallX + "," + wallY;
+      // Corners can expose three or four faces of the same cell. A single
+      // coherent tree/pillar/cabinet there is more legible and much cheaper
+      // than four intersecting copies of a repeated wall decoration.
+      if (!dressedWalls.has(wallKey)) {
+        dressedWalls.add(wallKey);
+        if (env.form === "strata") {
+          // Uneven bedrock is continuous; only selected pockets grow crystals.
+          solid("rock", -0.16, 0.40, height * 0.66, 0.78, height * 0.90, 0.74, stone, n * 0.5);
+          solid("round", 0.22, 0.43, height * 0.88, 0.54, 0.42, 0.69, secondary, -n * 0.4);
+          if (n > 0.73) {
+            for(let k=0;k<3;k++) solid("crystal", -0.23+k*0.22, 0.43+k*0.05, height+0.10+(k===1?0.16:0), 0.17+k*0.018, 0.24+(k===1?0.38:0.05), 0.18, k===1?accent:detail, (k-1)*0.10);
+            landmark("crystal-cluster");
+          } else if(n<0.29) {
+            solid("round", -0.12, 0.43, height+0.05, 0.65, 0.26, 0.66, stone, n*2);
+            solid("round", 0.23, 0.39, height+0.02, 0.31, 0.22, 0.40, secondary);
+          }
+          if(n>0.38 && n<0.63) {
+            solid("column", 0.24, 0.20, 0.20, 0.07, 0.18, 0.07, detail);
+            solid("round", 0.22, 0.22, 0.30, 0.23, 0.09, 0.22, accent);
+          }
+        } else if (env.form === "rootbank") {
+          // Trees occur as groves rather than one identical icon per grid cell.
+          const leafDark=metaFor(wallX,wallY,0x50894b,1,"foliage");
+          const leafLight=metaFor(wallX,wallY,0xb4d85d,1,"foliage");
+          const blossom=metaFor(wallX,wallY,n>0.8?0xf2c3ce:0xf2d981,1,"blossom");
+          const grow=0.84+n*0.22;
+          solid("shrub", -0.19, 0.40, height+0.10, 0.57, 0.29, 0.59, leafDark, n);
+          solid("shrub", 0.20, 0.40, height+0.15, 0.49, 0.33, 0.57, accent, -n);
+          if(n>0.57) {
+            solid("cone", -0.08, 0.49, height+0.28, 0.27, 0.68*grow, 0.27, secondary);
+            solid("column", 0.11, 0.48, height+0.49, 0.10, 0.34, 0.11, secondary, 0,-0.36);
+            solid("leafball", -0.22, 0.48, height+0.74*grow, 0.83, 0.53, 0.75, leafDark, 0.13,0,true);
+            solid("leafball", 0.17, 0.52, height+0.91*grow, 0.84, 0.63, 0.82, accent, -0.12,0,true);
+            solid("leafball", -0.21, 0.39, height+1.03*grow, 0.69, 0.46, 0.65, leafLight, 0.21,0,true);
+            solid("leafball", 0.24, 0.27, height+0.81*grow, 0.59, 0.41, 0.49, accent, -0.19);
+            if(n>0.83) for(let k=0;k<4;k++) solid("bud", -0.23+k*0.12, 0.23, height+0.71+(k%2)*0.12, 0.09, 0.055, 0.09, blossom);
+            landmark("leafy-tree");
+          } else if(n>0.30) {
+            solid("shrub", -0.16, 0.40, height+0.32, 0.59, 0.38, 0.60, leafLight,n);
+            solid("shrub", 0.17, 0.26, height+0.24, 0.46, 0.33, 0.44, accent,-n);
+            for(let k=0;k<3;k++) solid("bud", -0.20+k*0.17, 0.21, height+0.35+(k%2)*0.09, 0.075, 0.045, 0.08, blossom);
+            landmark("flowering-shrub");
+          } else {
+            solid("rock", -0.17, 0.39, height+0.15, 0.42, 0.38, 0.55, stone,n*2);
+            solid("rock", 0.16, 0.41, height+0.07, 0.31, 0.21, 0.36, stone,-n);
+          }
+        } else if (env.form === "karst") {
+          solid("round", -0.17, 0.42, height*0.72, 0.74, height*1.03, 0.73, stone, n);
+          solid("round", 0.22, 0.43, height*0.94, 0.52, 0.43, 0.65, secondary, -n);
+          if(n>0.76) {
+            solid("cone", -0.15, 0.45, height+0.23, 0.35, 0.85, 0.38, secondary);
+            solid("cone", 0.22, 0.39, height+0.05, 0.22, 0.41, 0.28, stone);
+            landmark("dripstone-grotto");
+          } else if(n>0.42) {
+            for(let k=0;k<3;k++) {
+              solid("column", -0.24+k*0.20, 0.27, 0.24+k*0.09, 0.06, 0.21, 0.07, secondary);
+              solid("round", -0.24+k*0.20, 0.24, 0.35+k*0.09, 0.26+k*0.03, 0.105, 0.26, k%2?accent:detail);
+            }
+            landmark("mushroom-garden");
+          }
+        } else if (env.form === "broken-masonry") {
+          // A low ruined wall with occasional columns, fallen blocks and ivy.
+          for(let k=0;k<2;k++) solid("box", -0.22+k*0.45, 0.38, height+0.09, 0.43, 0.18+n*0.12, 0.61, k?secondary:stone,(n-0.5)*0.06);
+          if(n>0.77) {
+            solid("box", -0.12, 0.42, height+0.27, 0.53, 0.19, 0.58, secondary);
+            solid("column", -0.12, 0.40, height+0.49, 0.32, 0.71, 0.33, stone);
+            solid("column", -0.12, 0.40, height+0.78, 0.38, 0.13, 0.38, secondary);
+            solid("box", -0.12, 0.42, height+0.89, 0.53, 0.12, 0.47, secondary,0.06);
+            landmark("broken-column");
+          } else if(n>0.40) solid("box", 0.12, 0.42, height+0.29, 0.57, 0.18, 0.47, secondary,(n-0.5)*0.7);
+          if(n<0.34) for(let k=0;k<3;k++) solid("leafball", -0.22+k*0.19, 0.17, height+0.10-k*0.07, 0.30, 0.18, 0.24, accent,n);
+        } else if (env.form === "timber-bays") {
+          // A continuous cottage wall, with deep framing only at structural bays.
+          for(let k=0;k<4;k++) solid("box", 0, 0.30, 0.15+k*0.235, 0.99, 0.22, 0.40, k%2?stone:accent);
+          solid("box", 0, 0.26, 1.09, 0.99, 0.15, 0.42, secondary);
+          if((wallX+wallY)%3===0) {
+            solid("box", 0, 0.16, 0.56, 0.18, 1.16, 0.29, secondary);
+            solid("box", 0.20, 0.16, 0.87, 0.11, 0.49, 0.16, secondary,0,-0.70);
+            landmark("timber-frame");
+          } else if(n>0.65) {
+            solid("box", 0, 0.095, 0.67, 0.57, 0.55, 0.13, secondary);
+            solid("box", 0, 0.028, 0.69, 0.43, 0.40, 0.027, detail);
+            solid("box", 0, 0.045, 0.68, 0.045, 0.47, 0.048, accent);
+            solid("box", 0, 0.044, 0.68, 0.48, 0.042, 0.048, accent);
+            solid("box", 0, 0.17, 0.38, 0.69, 0.10, 0.28, secondary);
+          }
+          if(n<0.17) {
+            solid("column", 0.21, 0.22, 0.22, 0.30, 0.37, 0.31, secondary);
+            solid("leafball", 0.20, 0.23, 0.46, 0.41, 0.31, 0.41, foliage);
+          }
+        } else if (env.form === "service-bays") {
+          solid("box", 0, 0.42, 0.58, 0.99, 1.04, 0.71, stone);
+          solid("box", 0, 0.20, 0.11, 0.99, 0.18, 0.34, secondary);
+          if(n>0.77) {
+            solid("box", -0.09, 0.20, 0.64, 0.62, 0.96, 0.33, secondary);
+            solid("box", -0.09, 0.024, 0.79, 0.43, 0.38, 0.036, detail);
+            for(let k=0;k<3;k++) solid("box", -0.09, 0.038, 0.34+k*0.08, 0.40, 0.035, 0.04, stone);
+            solid("box", 0.20, 0.027, 0.83, 0.065, 0.08, 0.04, accent);
+            landmark("vent-cabinet");
+          } else if((wallX+wallY)%3!==0) {
+            solid("box", 0, 0.11, 0.69, 0.79, 0.54, 0.14, secondary);
+            solid("box", 0, 0.027, 0.71, 0.69, 0.43, 0.026, detail);
+            solid("box", 0.24, 0.044, 0.71, 0.035, 0.47, 0.036, stone);
+          } else {
+            solid("box", 0, 0.12, 0.34, 0.55, 0.28, 0.20, accent);
+            solid("leafball", -0.11, 0.17, 0.59, 0.35, 0.41, 0.30, foliage);
+            solid("leafball", 0.15, 0.18, 0.55, 0.30, 0.29, 0.28, foliage);
+          }
+        } else if (env.form === "utility-stacks") {
+          solid("box", 0, 0.45, 0.52, 0.99, 0.92, 0.78, secondary);
+          solid("box", 0, 0.25, 0.19, 0.99, 0.18, 0.41, stone);
+          if(n>0.64) {
+            solid("box", -0.20, 0.35, 0.75+n*0.09, 0.40, 1.30+n*0.12, 0.61, stone);
+            solid("box", 0.23, 0.36, 0.65, 0.42, 1.07, 0.59, secondary);
+            solid("box", -0.19, 0.025, 0.93, 0.28, 0.34, 0.027, detail);
+            for(let k=0;k<3;k++) solid("box", -0.19, 0.02, 0.83+k*0.075, 0.20-k*0.025, 0.035, 0.023, accent);
+            solid("column", 0.29, 0.10, 0.79, 0.095, 0.63, 0.10, accent);
+            landmark("neon-stack");
+          } else if(n>0.29) {
+            solid("box", 0, 0.086, 0.69, 0.70, 0.53, 0.10, stone);
+            solid("box", 0, 0.020, 0.70, 0.59, 0.41, 0.024, accent);
+            for(let k=0;k<3;k++) solid("box", -0.12+k*0.13, 0.018, 0.66, 0.075, 0.12+k*0.065, 0.020, secondary);
+          } else {
+            for(let k=0;k<2;k++) solid("column", -0.18+k*0.31, 0.18, 0.70, 0.15, 0.81, 0.16, stone);
+            solid("box", 0, 0.12, 0.52, 0.63, 0.16, 0.12, detail);
+          }
+        } else if (env.form === "pressure-shells") {
+          // Continuous laboratory shell with occasional pods and planted alcoves.
+          solid("box", 0, 0.46, 0.56, 0.99, 0.90, 0.77, stone);
+          solid("box", 0, 0.25, 0.14, 0.99, 0.16, 0.42, secondary);
+          if(n>0.73) {
+            solid("column", 0, 0.43, 0.22, 0.78, 0.25, 0.78, secondary);
+            solid("round", 0, 0.43, 0.76, 0.81, 1.02, 0.80, stone);
+            for(const d of [-1,1]) solid("round", d*0.28, 0.30, 0.70, 0.14, 0.75, 0.31, secondary);
+            solid("box", 0, 0.04, 0.72, 0.32, 0.40, 0.05, accent);
+            solid("box", 0, 0.018, 0.83, 0.21, 0.07, 0.021, detail);
+            landmark("pressure-pod");
+          } else if(n>0.25) {
+            solid("box", 0, 0.10, 0.66, 0.72, 0.46, 0.15, secondary);
+            solid("box", 0, 0.022, 0.68, 0.60, 0.34, 0.03, accent);
+            for(let k=0;k<3;k++) solid("box", -0.15+k*0.15, 0.018, 0.67, 0.08, 0.15-k*0.025, 0.021, detail);
+          } else {
+            solid("box", 0, 0.17, 0.33, 0.62, 0.23, 0.26, secondary);
+            solid("leafball", -0.14, 0.24, 0.63, 0.37, 0.43, 0.36, foliage);
+            solid("leafball", 0.18, 0.23, 0.58, 0.30, 0.32, 0.30, foliage);
+          }
         }
       }
-    }
-
-    // Sparse pressed-paper chips and foliage. Deterministic visual hash only;
-    // no random calls into MD's seeded gameplay generator and no new colliders.
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!isFloor(map, x, y) || (map.stairs && map.stairs.x === x && map.stairs.y === y)) continue;
-        const n = hash01(x * 19 + 7, y * 23 + 11);
-        if (n < 0.63) continue;
-        const wallX = isWall(map, x - 1, y) ? -1 : isWall(map, x + 1, y) ? 1 : 0;
-        const wallY = isWall(map, x, y - 1) ? -1 : isWall(map, x, y + 1) ? 1 : 0;
-        if (!wallX && !wallY && n < 0.94) continue;
-        const cx = x + (wallX ? wallX * 0.32 : (n - 0.5) * 0.65);
-        const cz = y + (wallY ? wallY * 0.32 : (hash01(y, x) - 0.5) * 0.65);
-        const yy = (floorH(x, y, map) + floorH(x + 1, y + 1, map)) * 0.5 + 0.035;
-        const radius = 0.032 + n * 0.035;
-        const cells = [{ x: x, y: y, room: isRoom(map, x, y) }];
-        paperQuad([
-          { x: cx - radius, y: yy, z: cz - radius * 0.3 },
-          { x: cx + radius * 0.1, y: yy, z: cz - radius * 0.7 },
-          { x: cx + radius, y: yy, z: cz + radius * 0.2 },
-          { x: cx - radius * 0.1, y: yy, z: cz + radius * 0.65 },
-        ], th.id === "forest" ? art.accent : art.fleck, cells, 0.85);
+      // Only low, non-blocking surface detail along wide room margins. The
+      // tile centre, every corridor and the stairs/spawn neighbourhood stay clear.
+      const reserved = [map.stairs, map.playerSpawn].some(p => p && Math.abs(p.x - floorX) + Math.abs(p.y - floorY) <= 1);
+      const corridor = !isRoom(map, floorX, floorY) || (isWall(map, floorX - 1, floorY) && isWall(map, floorX + 1, floorY)) || (isWall(map, floorX, floorY - 1) && isWall(map, floorX, floorY + 1));
+      if (!reserved && !corridor && n > 0.78 && env.form !== "rootbank") {
+        const material = metaFor(floorX, floorY, env.form === "karst" ? env.accent : env.secondary, 0.84);
+        const natural = env.relief > 0;
+        addSolid(surfaces, natural ? "round" : "box", [cx + nx * 0.095, 0.006, cz + nz * 0.095], [0.68, env.form === "karst" ? 0.013 : 0.027, 0.16], rotation, material);
       }
     }
-    if (pb.idx.length) {
-      paperDetailMesh = pb.toMesh(new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide }));
-      paperDetailMesh.name = "dungeon-paper-details";
-      paperDetailMeta = pb.meta;
-      scene.add(paperDetailMesh);
-    }
 
-    if (fb.idx.length) {
-      floorMesh = fb.toMesh(caveMat(dirtTex, th));
-      floorMesh.name = "dungeon-floor";
-      scene.add(floorMesh);
-      floorMeta = fb.meta;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (isFloor(map, x, y)) {
+      if (isWall(map, x, y - 1)) facade(x, y, x + 1, y, x, y - 1, x, y);
+      if (isWall(map, x + 1, y)) facade(x + 1, y, x + 1, y + 1, x + 1, y, x, y);
+      if (isWall(map, x, y + 1)) facade(x + 1, y + 1, x, y + 1, x, y + 1, x, y);
+      if (isWall(map, x - 1, y)) facade(x, y + 1, x, y, x - 1, y, x, y);
     }
-    if (fbB && fbB.idx.length) {
-      floorMeshB = fbB.toMesh(caveMat(dirtTexB, th));
-      scene.add(floorMeshB);
-      floorMetaB = fbB.meta;
+    // Restrained low relief at natural room edges only; texture carries the
+    // walkable material everywhere, leaving actors and items the visual priority.
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      if (!isFloor(map,x,y) || !isRoom(map,x,y)) continue;
+      if ([map.stairs,map.playerSpawn].some(p=>p && Math.abs(p.x-x)+Math.abs(p.y-y)<=1)) continue;
+      const n=hash01(x*41+13,y*29+7), edge=isWall(map,x-1,y)||isWall(map,x+1,y)||isWall(map,x,y-1)||isWall(map,x,y+1);
+      const base=(floorH(x,y,map)+floorH(x+1,y+1,map))/2;
+      if(env.form==="rootbank" && edge && n>0.42) {
+        for(let k=0;k<3;k++) {
+          const color=k===2 ? (n>0.7?0xf2ca87:0xecc2d6) : env.accent;
+          const material=metaFor(x,y,color,1,k===2?"blossom":"foliage");
+          addSolid(surfaces,"bud",[x-0.26+k*0.24,base+0.001,y+(n-0.5)*0.5],[0.23,0.026,0.17],[0,n*4+k,0],material);
+        }
+      } else if(env.form==="karst" && edge && n>0.55) {
+        const material=metaFor(x,y,env.accent,1,"water");
+        addSolid(surfaces,"round",[x,base+0.002,y],[0.74,0.013,0.58],[0,n*3,0],material);
+      } else if(env.form==="broken-masonry" && edge && n>0.73) {
+        const material=metaFor(x,y,env.secondary,1,"stone");
+        addSolid(surfaces,"box",[x,base+0.002,y],[0.47,0.023,0.36],[0,n*0.6,0],material);
+      } else if(["service-bays","pressure-shells","utility-stacks"].includes(env.form) && n>0.95) {
+        const material=metaFor(x,y,env.secondary,1,"metal");
+        addSolid(surfaces,"box",[x,base+0.001,y],[0.37,0.012,0.31],[0,0,0],material);
+      } else if(env.form==="timber-bays" && edge && n>0.94) {
+        const material=metaFor(x,y,env.secondary,1,"wood");
+        addSolid(surfaces,"box",[x,base+0.001,y],[0.48,0.012,0.12],[0,n*0.6,0],material);
+      } else if(env.form==="strata" && edge && n>0.76) {
+        const material=metaFor(x,y,env.secondary,1,"stone");
+        addSolid(surfaces,"round",[x+0.11,base+0.001,y-0.12],[0.24,0.025,0.17],[0,n*2,0],material);
+      }
     }
-    if (wb.idx.length) {
-      wallMesh = wb.toMesh(caveMat(rockTex, th));
-      wallMesh.name = "dungeon-wall";
-      scene.add(wallMesh);
-      wallMeta = wb.meta;
+    // Close exposed backs of the thin cutaway shell, including map boundaries.
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (isWall(map, x, y) && nearFloor(x, y)) {
+      for (const e of [[x,y,x+1,y,0,-1],[x+1,y,x+1,y+1,1,0],[x+1,y+1,x,y+1,0,1],[x,y+1,x,y,-1,0]]) {
+        if (inMap(map, x + e[4], y + e[5]) && (!isWall(map, x + e[4], y + e[5]) || nearFloor(x + e[4], y + e[5]))) continue;
+        const b = W(wallVar(x,y)), a = wallPosition(e[0],e[1]), c = wallPosition(e[2],e[3]);
+        const meta = { kind: "wall", cells: [{x,y,room:false}], tone: 0.65 };
+        const ids = [{x:a.x,y:-0.08,z:a.z},{x:c.x,y:-0.08,z:c.z},c,a].map(p=>b.vert(p.x,p.y,p.z,p.x*UV_SCALE,p.z*UV_SCALE,meta));
+        b.quad(...ids);
+      }
     }
-    if (wbB && wbB.idx.length) {
-      wallMeshB = wbB.toMesh(caveMat(rockTexB, th));
-      scene.add(wallMeshB);
-      wallMetaB = wbB.meta;
+    function mesh(builder, name, texture, shiny) {
+      if (!builder.idx.length) return null;
+      const material = caveMat(texture, th);
+      if (!texture) { material.specular.setHex(shiny ? 0x667b80 : 0x151b20); material.shininess = shiny ? 40 : 7; }
+      const m = builder.toMesh(material); m.name = name; m.userData.environmentForm = env.form;
+      scene.add(m); return m;
     }
-    if (eb && eb.idx.length) {
-      edgeMesh = eb.toMesh(new THREE.MeshBasicMaterial({
-        vertexColors: true,
-        fog: true,
-        transparent: true,
-        opacity: 0.95,
-      }));
-      edgeMesh.name = "dungeon-theme-edge";
-      edgeMeta = eb.meta;
-      scene.add(edgeMesh);
-    }
-
+    floorMesh = mesh(fb, "dungeon-floor", dirtTex); floorMeta = fb.meta;
+    floorMeshB = mesh(fbB, "dungeon-floor-secondary", dirtTexB); floorMetaB = fbB.meta;
+    wallMesh = mesh(wb, "dungeon-wall", rockTex); wallMeta = wb.meta;
+    wallMeshB = mesh(wbB, "dungeon-wall-secondary", rockTexB); wallMetaB = wbB.meta;
+    environmentMesh = mesh(structures, "dungeon-environment-volumes", volumeAtlas()); environmentMeta = structures.meta;
+    surfaceMesh = mesh(surfaces, "dungeon-surface-inlays", volumeAtlas(), env.form === "karst"); surfaceMeta = surfaces.meta;
     buildStairsDecor(map);
     buildDecos(map);
   }
@@ -1237,54 +1372,9 @@
   function buildDecos(map) {
     clearDecos();
     if (!map || !decoRoot) return;
-    const mh = {};
-    const houses = map.monsterHouseRooms || [];
-    for (let i = 0; i < houses.length; i++) mh[houses[i]] = true;
-    for (let y = 0; y < map.height; y++) {
-      for (let x = 0; x < map.width; x++) {
-        if (map.tiles[y][x] === MD.TILE.WALL) continue;
-        if (map.stairs && map.stairs.x === x && map.stairs.y === y) continue;
-        if (map.playerSpawn && map.playerSpawn.x === x && map.playerSpawn.y === y) continue;
-        const wE = isWall(map, x + 1, y) ? 1 : 0;
-        const wW = isWall(map, x - 1, y) ? 1 : 0;
-        const wS = isWall(map, x, y + 1) ? 1 : 0;
-        const wN = isWall(map, x, y - 1) ? 1 : 0;
-        const walls = wE + wW + wS + wN;
-        if (!walls) continue;
-        const room = isRoom(map, x, y);
-        const rid = map.roomIds[y][x];
-        const n = hash01(x * 17, y * 31);
-        const pool = (currentTheme && currentTheme.deco) || ["crystal", "mushroom", "lantern", "vine", "flower"];
-        const pick = (f) => pool[Math.min(pool.length - 1, Math.floor(f * pool.length))];
-        let name = null;
-        if (room) {
-          if (mh[rid] && n > 0.42) {
-            name = n > 0.72 ? pick((n * 7) % 1) : (n > 0.56 ? pick((n * 13) % 1) : pick((n * 5) % 1));
-          } else if (walls >= 2 && n > 0.36) {
-            name = n > 0.7 ? pick((n * 11) % 1) : (n > 0.52 ? pick((n * 17) % 1) : pick((n * 3) % 1));
-          } else if (n > 0.64) {
-            name = pick((n * 23) % 1);
-          }
-        } else if (n > 0.84) {
-          name = pick((n * 29) % 1);
-        }
-        if (!name) continue;
-        // skip 1-tile corridors (two opposite walls) — sprites clip both sides
-        if ((wE && wW && !wN && !wS) || (wN && wS && !wE && !wW)) continue;
-        if (walls >= 3) continue;
-        const sz = (MD.sprites && MD.sprites.worldSize(name)) || { w: 0.7580, h: 0.9000 };
-        const half = (sz.w || 0.4) * 0.5;
-        const margin = 0.1;
-        const maxToward = Math.max(0, 0.5 - half - margin);
-        const toward = Math.min(0.1, maxToward);
-        const ox = (wE - wW) * toward;
-        const oz = (wS - wN) * toward;
-        addDeco(name, x * S + ox, y * S + oz, x, y);
-      }
-    }
-    if (map.stairs) {
-      addDeco("stairs", map.stairs.x * S, map.stairs.y * S, map.stairs.x, map.stairs.y);
-    }
+    // Environment is made of lit volumes. Only the actionable exit is an
+    // outlined billboard, keeping its visual priority alongside actors/items.
+    if (map.stairs) addDeco("stairs", map.stairs.x * S, map.stairs.y * S, map.stairs.x, map.stairs.y);
   }
 
   function updateDecos(state) {
@@ -1324,7 +1414,7 @@
       if (c.room) room = true;
     }
     if (!seen) return COL.black;
-    if (meta.paperColor) return tmpColor.copy(meta.paperColor).multiplyScalar((vis ? 1 : 0.18) * (meta.tone == null ? 1 : meta.tone));
+    if (meta.surfaceColor) return tmpColor.copy(meta.surfaceColor).multiplyScalar((vis ? 1 : 0.18) * (meta.tone == null ? 1 : meta.tone));
     if (meta.kind === "floor") {
       const c0 = meta.cells[0];
       if (vis) return room ? tint(COL.floorRoomVis, c0.x, c0.y, 0.08) : tint(COL.floorCorrVis, c0.x, c0.y, 0.07);
@@ -1340,7 +1430,7 @@
     const arr = attr.array;
     for (let i = 0; i < meta.length; i++) {
       const c = shadeMeta(state, meta[i]);
-      const tone = meta[i].paperColor ? 1 : (meta[i].tone == null ? 1 : meta[i].tone);
+      const tone = meta[i].surfaceColor ? 1 : (meta[i].tone == null ? 1 : meta[i].tone);
       arr[i * 3] = c.r * tone;
       arr[i * 3 + 1] = c.g * tone;
       arr[i * 3 + 2] = c.b * tone;
@@ -1358,8 +1448,8 @@
     paintMeshColors(wallMesh, wallMeta, state);
     paintMeshColors(floorMeshB, floorMetaB, state);
     paintMeshColors(wallMeshB, wallMetaB, state);
-    paintMeshColors(paperDetailMesh, paperDetailMeta, state);
-    paintMeshColors(edgeMesh, edgeMeta, state);
+    paintMeshColors(environmentMesh, environmentMeta, state);
+    paintMeshColors(surfaceMesh, surfaceMeta, state);
     if (map.stairs) {
       const v = visOf(state, map.stairs.x, map.stairs.y);
       stairsRoot.visible = v.seen;
@@ -1715,31 +1805,16 @@
 
     dirtTex = makeSeamlessTex(256, 3, [232, 210, 160]);
     rockTex = makeSeamlessTex(256, 19, [180, 192, 208]);
-    // Prefer runtime cave textures (anime floor/wall)
-    tryLoadRuntimeCaveTex("floor", function (tex) {
-      dirtTex = tex;
-      if (floorMesh && floorMesh.material) {
-        floorMesh.material.map = tex;
-        floorMesh.material.needsUpdate = true;
-      }
-    });
-    tryLoadRuntimeCaveTex("wall", function (tex) {
-      rockTex = tex;
-      if (wallMesh && wallMesh.material) {
-        wallMesh.material.map = tex;
-        wallMesh.material.needsUpdate = true;
-      }
-    });
 
-    hemi = new THREE.HemisphereLight(0xfff0d8, 0xa8c8b8, 0.78);
+    hemi = new THREE.HemisphereLight(0xfff9e9, 0xa8c8b8, 1.02);
     scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xfff4e0, 0.7);
+    const dir = new THREE.DirectionalLight(0xfff4df, 1.12);
     dir.position.set(10, 16, 12);
     scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xb8d8e8, 0.28);
+    const fill = new THREE.DirectionalLight(0xd2ecff, 0.38);
     fill.position.set(-8, 6, -4);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0xf0e8d8, 0.38));
+    scene.add(new THREE.AmbientLight(0xfff7e8, 0.42));
 
     playerLight = new THREE.PointLight(0xffd090, 0.5, 6);
     scene.add(playerLight);
@@ -1884,6 +1959,30 @@
     return orbit.yaw;
   }
 
+  // Snapshot-only diagnostics for GPU acceptance tests; no mutable scene or
+  // gameplay references escape this renderer and nothing runs per animation frame.
+  function getEnvironmentInfo() {
+    const meshes = [floorMesh, floorMeshB, wallMesh, wallMeshB, environmentMesh, surfaceMesh].filter(Boolean);
+    let vertices = 0, triangles = 0, signature = 2166136261;
+    for (const mesh of meshes) {
+      const position = mesh.geometry.attributes.position;
+      vertices += position.count;
+      triangles += mesh.geometry.index ? mesh.geometry.index.count / 3 : position.count / 3;
+      for (const value of position.array) signature = Math.imul(signature ^ Math.round(value * 10000), 16777619);
+    }
+    return Object.freeze({
+      themeId: currentTheme && currentTheme.id,
+      form: currentTheme && currentTheme.environment.form,
+      meshNames: Object.freeze(meshes.map(mesh => mesh.name)),
+      meshCount: meshes.length, vertices, triangles,
+      geometrySignature: (signature >>> 0).toString(16),
+      landmarkKinds: Object.freeze(Object.keys(environmentStats.landmarkCounts).sort()),
+      landmarkCounts: Object.freeze({ ...environmentStats.landmarkCounts }),
+      primitiveCounts: Object.freeze({ ...environmentStats.primitiveCounts }),
+      outlineMeshCount: scene ? scene.children.filter(node => node.name === "dungeon-paper-details" || node.name === "dungeon-theme-edge" || node.isLineSegments).length : 0,
+    });
+  }
+
   MD.view3d = {
     init: init,
     sync: sync,
@@ -1892,6 +1991,7 @@
     pickTile: pickTile,
     screenToTileDir: screenToTileDir,
     getYaw: getYaw,
+    getEnvironmentInfo: getEnvironmentInfo,
     setTheme: setTheme,
     active: false,
   };

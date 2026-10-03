@@ -89,3 +89,6 @@ tests/fixtures/player-hp47-rules.xlsx -filter -diff -merge -text
 
 # OP artwork is a single 3 MiB distribution asset, published as an ordinary Git blob.
 assets/runtime/opening/whale-maid.png -filter -diff -merge -text
+
+# Final game-stage illustration is a 3 MiB distribution asset.
+assets/runtime/ui/game-stage/town-stage-16x10.png -filter -diff -merge -text

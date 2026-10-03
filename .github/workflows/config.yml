@@ -64,12 +64,35 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Test browser gameplay twice and independent static build
         run: npm run test:browser:stable
-      - name: Upload browser verification screenshots
+      # Keep each review archive below the 32 MiB file-download limit. The
+      # complementary interface pattern retains every other present/future PNG.
+      - name: Upload dungeon verification screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mystery-dungeon-browser-${{ github.sha }}
-          path: test-results/*.png
+          name: mystery-dungeon-browser-dungeon-${{ github.sha }}
+          path: |
+            test-results/game-dungeon-*.png
+            test-results/normal-webgl-*.png
+            test-results/normal-hud-safe-*.png
+            test-results/save-default-renderer.png
+            test-results/multidungeon-training-grove.png
+            test-results/continuous-player-journey.png
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload town and interface verification screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mystery-dungeon-browser-interface-${{ github.sha }}
+          path: |
+            test-results/*.png
+            !test-results/game-dungeon-*.png
+            !test-results/normal-webgl-*.png
+            !test-results/normal-hud-safe-*.png
+            !test-results/save-default-renderer.png
+            !test-results/multidungeon-training-grove.png
+            !test-results/continuous-player-journey.png
           if-no-files-found: ignore
           retention-days: 14
       - name: Record exact build provenance

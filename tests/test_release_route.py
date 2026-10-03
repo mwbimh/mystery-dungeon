@@ -46,6 +46,25 @@ class ReleaseRouteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             route.validate_route("workflow_dispatch", "", "", "", "owner/repo")
 
+    def test_screenshot_archives_partition_all_pngs_without_dropping_evidence(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/config.yml").read_text()
+
+        def paths_for(artifact):
+            section = workflow.split("name: " + artifact, 1)[1]
+            lines = section.split("path: |", 1)[1].split("if-no-files-found:", 1)[0]
+            return [line.strip() for line in lines.splitlines() if line.strip()]
+
+        dungeon = paths_for("mystery-dungeon-browser-dungeon-${{ github.sha }}")
+        interface = paths_for("mystery-dungeon-browser-interface-${{ github.sha }}")
+        self.assertTrue(dungeon)
+        self.assertTrue(all(path.startswith("test-results/") and path.endswith(".png") for path in dungeon))
+        self.assertEqual(interface[0], "test-results/*.png")
+        # Every exclusion in the catch-all archive is included in the dungeon
+        # archive, so even a new screenshot name cannot silently disappear.
+        self.assertEqual(set(interface[1:]), {"!" + path for path in dungeon})
+        self.assertEqual(len(interface), len(dungeon) + 1)
+
 
 if __name__ == "__main__":
     unittest.main()
