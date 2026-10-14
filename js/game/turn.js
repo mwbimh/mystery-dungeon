@@ -131,6 +131,7 @@
     state.skills = emptySkills();
     G.renderSkills();
     state.endKind = "death";
+    G.saveNow(); // 立刻作废进度、清空背包，不能刷新反悔
     log("倒下了……", "bad");
     document.getElementById("endTitle").textContent = "倒下了";
     document.getElementById("endMsg").textContent = "背包里的物品都丢掉了。仓库仍然保留。";

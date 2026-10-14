@@ -282,6 +282,7 @@
 
   function updateUI() {
     MD.updateSidePanel(state);
+    if (G.scheduleSave) G.scheduleSave(); // 状态变了就（防抖）自动存档
   }
 
   Object.assign(G, {

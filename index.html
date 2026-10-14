@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>迷宫</title>
-  <link rel="stylesheet" href="css/style.css?v=70" />
+  <link rel="stylesheet" href="css/style.css?v=71" />
 </head>
 <body>
   <div class="app">
@@ -156,8 +156,13 @@
         <dt>楼梯</dt><dd>踩上下楼楼梯即前往下一层（第 24 层出口通关）</dd>
         <dt>视角</dt><dd>俯视角固定，右键 / Q / E 绕主角水平旋转，滚轮缩放。方向键与 WASD 按镜头方向移动（上键往画面深处走）</dd>
         <dt>死亡</dt><dd>HP 归零丢掉背包返回镇子，仓库保留</dd>
+        <dt>存档</dt><dd>自动保存在浏览器里，关掉页面再打开会回到原来的楼层。换浏览器或备份时用下面的导出 / 导入</dd>
       </dl>
+      <p class="save-msg" id="saveMsg"></p>
       <div class="actions">
+        <button type="button" class="ghost" id="btnExport">导出存档</button>
+        <button type="button" class="ghost" id="btnImport">导入存档</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
         <button type="button" class="ghost" id="btnHelpClose">关闭</button>
       </div>
     </div>
@@ -177,7 +182,7 @@
   <script>
   (function () {
     var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
-    var v = "70"; // 脚本缓存版本；改动 JS/CSS 时同步改 css 链接里的 v
+    var v = "71"; // 脚本缓存版本；改动 JS/CSS 时同步改 css 链接里的 v
     var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
     if (!flat) {
       files.unshift("vendor/three.min.js");
@@ -188,7 +193,7 @@
     }
     files.push("js/story/scenes.js?v=" + v, "js/story/vn.js?v=" + v);
     files.push("js/ui.js?v=" + v);
-    ["core", "floor", "turn", "itemuse", "inventory", "skillbar", "input", "main"].forEach(function (m) {
+    ["core", "floor", "turn", "itemuse", "inventory", "skillbar", "input", "save", "main"].forEach(function (m) {
       files.push("js/game/" + m + ".js?v=" + v);
     });
     function load(i) {

@@ -47,6 +47,14 @@ python3 -m http.server 8000
 - 操作：点击 / Enter / 空格 / Z 推进，数字键或方向键选选项，Esc 跳过。播放时游戏输入被拦截。
 - 已看过的剧情记在 localStorage `md_story_v1`。URL 加 `?nostory=1` 关闭剧情（自动测试用）。
 
+## 存档
+
+- `js/game/save.js`。全部存在浏览器 localStorage：`md_warehouse_v1`（仓库）、`md-skill-meta`（技能栏格数）、`md_story_v1`（看过的剧情）、`md_run_v1`（背包、技能栏、迷宫中途进度，约 17 KB）。
+- 迷宫里每次行动后自动保存（防抖 250ms），关页面或切到后台时立即保存；重新打开会直接回到原来的楼层。
+- 倒下时立刻作废进度、清空背包，刷新也不能反悔。
+- 帮助面板里有「导出存档 / 导入存档」：导出是包含以上所有数据的 JSON 文件，导入校验后覆盖并刷新页面。
+- 控制台：`MD.save.exportData()`、`MD.save.importData(obj)`。
+
 ## 自测
 
 ```sh
