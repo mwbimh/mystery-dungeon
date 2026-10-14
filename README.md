@@ -38,6 +38,15 @@ python3 -m http.server 8000
 
 `index.html` 里脚本的 `v` 和 CSS 链接的 `?v=` 保持一致，改动 JS/CSS 后一起加一。
 
+## 剧情（视觉小说）
+
+- `js/story/vn.js`：播放器。`MD.story.trigger(event, ctx)` 按事件挑剧情播放；`MD.story.play(id)` 直接播放；`MD.story.validate()` 检查数据。
+- `js/story/scenes.js`：角色和剧情数据，改台词只改这里。格式说明写在文件开头。
+- 触发事件：`town`（进镇；`after: "death" | "clear"` 区分死亡/通关回镇）、`npc`（点镇上 NPC，`npc` 取按钮的 `data-npc`）、`floor`（到达某层）。
+- 立绘放 `assets/runtime/portraits/<角色>.webp`；表情差分放 `assets/runtime/portraits/<角色>/<表情>.webp`，台词写 `["kimi:smile", "……"]` 即可，找不到差分时自动用默认立绘。也可以在角色的 `faces` 里给某个表情指定任意路径。
+- 操作：点击 / Enter / 空格 / Z 推进，数字键或方向键选选项，Esc 跳过。播放时游戏输入被拦截。
+- 已看过的剧情记在 localStorage `md_story_v1`。URL 加 `?nostory=1` 关闭剧情（自动测试用）。
+
 ## 自测
 
 ```sh

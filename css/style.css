@@ -1196,3 +1196,126 @@ button.hud-seal {
 }
 #debugPanel .dbg-btn:hover { background: rgba(140, 90, 40, 0.95); }
 #debugPanel .dbg-small { font-size: 11px; padding: 2px 6px; }
+
+/* ---- 剧情（视觉小说） ---- */
+.vn {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: linear-gradient(to top, rgba(30, 22, 14, 0.55), rgba(30, 22, 14, 0.12) 55%, rgba(30, 22, 14, 0));
+  user-select: none;
+  cursor: pointer;
+}
+.vn.hidden { display: none; }
+.vn-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.vn-portrait {
+  position: absolute;
+  bottom: -6vh;
+  height: 92vh;
+  max-width: 46vw;
+  object-fit: contain;
+  object-position: bottom;
+  opacity: 0;
+  transition: opacity 0.25s, filter 0.25s, transform 0.25s;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35));
+}
+.vn-portrait:not([src]) { display: none; }
+.vn-left { left: 4vw; }
+.vn-right { right: 4vw; }
+.vn-portrait.shown { opacity: 1; }
+.vn-portrait.in { animation: vnIn 0.32s ease-out; }
+.vn-portrait.dim { filter: brightness(0.55) saturate(0.7) drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35)); }
+.vn-portrait.talk { transform: translateY(-6px); }
+@keyframes vnIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.vn-box {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(900px, 94vw);
+  min-height: 150px;
+  padding: 36px 70px 30px 64px;
+  background: url("../assets/runtime/ui/log-panel.png") center / 100% 100% no-repeat;
+  color: #4a3420;
+}
+.vn-name {
+  position: absolute;
+  top: -16px;
+  left: 44px;
+  padding: 4px 18px;
+  border-radius: 10px;
+  background: #8a5a30;
+  border: 2px solid #e8c88a;
+  color: #fff4dc;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  box-shadow: 0 3px 8px rgba(60, 30, 10, 0.3);
+}
+.vn-name.empty { display: none; }
+.vn-text {
+  font-size: 1.12rem;
+  line-height: 1.75;
+  min-height: 3.5em;
+  white-space: pre-wrap;
+}
+.vn-text.narration { color: #6a5038; font-style: italic; }
+.vn-hint {
+  position: absolute;
+  right: 46px;
+  bottom: 18px;
+  color: #8a5a30;
+  font-size: 0.85rem;
+  opacity: 0;
+}
+.vn-hint.show { opacity: 1; animation: vnBob 0.9s ease-in-out infinite; }
+@keyframes vnBob { 50% { transform: translateY(3px); } }
+.vn-choices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+}
+.vn-choices:empty { display: none; }
+.vn-choice {
+  min-width: 46%;
+  text-align: left;
+  padding: 7px 16px;
+  border-radius: 10px;
+  border: 2px solid #c48848;
+  background: #fff4dc;
+  color: #5a3a20;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.vn-choice:hover, .vn-choice:focus { background: #f0d8a8; outline: none; border-color: #8a5a30; }
+.vn-choice:focus::before { content: "▶ "; }
+.vn-skip {
+  position: absolute;
+  top: -14px;
+  right: 48px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 244, 220, 0.6);
+  background: rgba(60, 40, 20, 0.45);
+  color: #fff4dc;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .vn-portrait { height: 70vh; max-width: 60vw; bottom: 22vh; }
+  .vn-left { left: -6vw; }
+  .vn-right { right: -6vw; }
+  .vn-box { padding: 32px 34px 26px; }
+}

@@ -46,6 +46,7 @@
   showOverlay("townOverlay");
   updateUI();
   canvas.focus();
+  if (MD.story) MD.story.trigger("town", {});
   requestAnimationFrame(frame);
 
   // Expose for debug

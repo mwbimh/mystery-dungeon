@@ -287,6 +287,7 @@
         }
         if (action === "npc") {
           const name = btn.dataset.npc || "友人";
+          if (MD.story && MD.story.trigger("npc", { npc: name })) return;
           const chip = document.getElementById("townMsg");
           if (chip) chip.textContent = name + "在镇子里晃悠。点上方入口进迷宫，点 DeepSeek 开仓库。";
         }
