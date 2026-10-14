@@ -117,10 +117,17 @@
     return true;
   }
 
+  let lastW = 0, lastH = 0;
+  let townFrames = 0;
+  let renderIdle = false;
   function resize(cssW, cssH) {
     if (!V.renderer || !V.camera) return;
     const w = Math.max(1, cssW | 0);
     const h = Math.max(1, cssH | 0);
+    // setSize 会重设 canvas 宽高（即使数值相同也会清空并重建绘图缓冲），只在尺寸变化时调用
+    if (w === lastW && h === lastH) return;
+    lastW = w;
+    lastH = h;
     V.renderer.setSize(w, h, false);
     V.camera.aspect = w / h;
     V.camera.updateProjectionMatrix();
@@ -130,6 +137,10 @@
     if (!V.active) return;
     const now = performance.now();
     if (state.mode !== "dungeon" || !state.map) {
+      // 镇子里 3D 场景被镇子地图盖住且静止：清完场景后渲染一帧就停
+      if (!V.lastMap && townFrames >= 2) { renderIdle = true; return; }
+      townFrames++;
+      renderIdle = false;
       if (V.lastMap) {
         clearMap();
         V.lastMap = null;
@@ -142,6 +153,8 @@
       hideFx();
       return;
     }
+    townFrames = 0;
+    renderIdle = false;
     if (state.map !== V.lastMap) {
       try {
         rebuildMap(state.map);
@@ -166,6 +179,7 @@
 
   function render() {
     if (!V.active || !V.renderer) return;
+    if (renderIdle) return;
     V.renderer.render(V.scene, V.camera);
   }
 
@@ -210,6 +224,22 @@
     return [dx, dy];
   }
 
+  /** Renderer stats for debugging/perf tests. */
+  function debugInfo() {
+    if (!V.renderer) return null;
+    const i = V.renderer.info;
+    let objs = 0;
+    if (V.scene) V.scene.traverse(function () { objs++; });
+    return {
+      geometries: i.memory.geometries,
+      textures: i.memory.textures,
+      programs: i.programs ? i.programs.length : 0,
+      calls: i.render.calls,
+      triangles: i.render.triangles,
+      sceneObjects: objs,
+    };
+  }
+
   function getYaw() {
     return orbit.yaw;
   }
@@ -223,6 +253,7 @@
     screenToTileDir: screenToTileDir,
     getYaw: getYaw,
     setTheme: setTheme,
+    debugInfo: debugInfo,
     active: false,
   };
 })(typeof window !== "undefined" ? window : globalThis);

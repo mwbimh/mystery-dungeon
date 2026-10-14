@@ -21,10 +21,29 @@
     return paperMats[name];
   }
 
+  // 同一贴图的纸片共用一个平面几何体（装饰每层几百个），永不释放
+  const paperGeoCache = {};
+  function paperGeo(name, sz, flipU) {
+    const key = name + (flipU ? "|flip" : "");
+    let geo = paperGeoCache[key];
+    if (geo && geo.userData.w === sz.w && geo.userData.h === sz.h) return geo;
+    geo = new THREE.PlaneGeometry(sz.w, sz.h);
+    geo.translate(0, sz.h / 2, 0);
+    if (flipU) {
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
+      uv.needsUpdate = true;
+    }
+    geo.userData.w = sz.w;
+    geo.userData.h = sz.h;
+    geo.userData.shared = true;
+    paperGeoCache[key] = geo;
+    return geo;
+  }
+
   function makePaperMesh(name, kind) {
     const sz = (MD.sprites && MD.sprites.worldSize(name)) || { w: 0.7580, h: 0.9000 };
-    const geo = new THREE.PlaneGeometry(sz.w, sz.h);
-    geo.translate(0, sz.h / 2, 0);
+    const geo = paperGeo(name, sz, false);
     const mesh = new THREE.Mesh(geo, paperMat(name));
     mesh.userData.name = name;
     mesh.userData.kind = kind;
@@ -45,12 +64,8 @@
   function makeAtlasPaperMesh(name) {
     const sz = (MD.sprites && MD.sprites.worldSize(name)) || { w: 0.7580, h: 0.9000 };
     const spec = atlasSpec(name);
-    const geo = new THREE.PlaneGeometry(sz.w, sz.h);
-    geo.translate(0, sz.h / 2, 0);
     // Billboard does rotateY(π), which mirrors U. Flip UVs so left/right match the atlas.
-    const uv = geo.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
-    uv.needsUpdate = true;
+    const geo = paperGeo(name, sz, true);
     const canvas = document.createElement("canvas");
     canvas.width = spec.cellW;
     canvas.height = spec.cellH;
@@ -232,14 +247,22 @@
     return g;
   }
 
+  /** 释放纸片自己独占的资源（共享几何体和 paperMats 里的材质不动）。 */
+  function disposePaper(paper) {
+    if (!paper) return;
+    const ud = paper.userData || {};
+    if (paper.geometry && !(paper.geometry.userData && paper.geometry.userData.shared)) paper.geometry.dispose();
+    if (ud.atlas) {
+      if (ud.atlasTex) ud.atlasTex.dispose();
+      if (paper.material) paper.material.dispose();
+    }
+  }
+
   function setPaper(group, name, kind) {
     if (group.userData.paper && group.userData.name === name) return;
     if (group.userData.paper) {
       group.remove(group.userData.paper);
-      if (group.userData.paper.geometry) group.userData.paper.geometry.dispose();
-      if (group.userData.paper.userData && group.userData.paper.userData.playerAtlas && group.userData.paper.material) {
-        group.userData.paper.material.dispose();
-      }
+      disposePaper(group.userData.paper);
       group.userData.paper = null;
     }
     const paper = (name === "player" || name === "slime" || name === "bat")
@@ -258,6 +281,6 @@
 
   Object.assign(V, {
     paperMat, makePaperMesh, updatePlayerSprite, updateMonsterSprite,
-    paperSortOrder, allocActor, allocItem, setPaper,
+    paperSortOrder, allocActor, allocItem, setPaper, disposePaper,
   });
 })(typeof window !== "undefined" ? window : globalThis);

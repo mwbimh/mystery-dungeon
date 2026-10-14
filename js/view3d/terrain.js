@@ -421,6 +421,7 @@
 
     buildStairsDecor(map);
     buildDecos(map);
+    placeDecos(map);
   }
 
   function buildStairsDecor(map) {
@@ -455,9 +456,7 @@
     while (V.decoRoot.children.length) {
       const ch = V.decoRoot.children[0];
       V.decoRoot.remove(ch);
-      if (ch.userData && ch.userData.paper && ch.userData.paper.geometry) {
-        ch.userData.paper.geometry.dispose();
-      }
+      if (ch.userData && ch.userData.paper) V.disposePaper(ch.userData.paper);
     }
   }
 
@@ -531,25 +530,42 @@
     }
   }
 
-  function updateDecos(state) {
-    if (!decoList.length) return;
+  // 装饰的位置只取决于地图（静态），可见性只在视野变化时变，朝向只在相机动时变
+  let decoCamSig = "";
+  function placeDecos(map) {
+    for (let i = 0; i < decoList.length; i++) {
+      const g = decoList[i];
+      const clear = V.wallClearance(map, g.userData.tx, g.userData.ty);
+      g.position.x = g.userData.tx * S + (g.userData.ox || 0) + clear.x * 0.7;
+      g.position.z = g.userData.ty * S + (g.userData.oz || 0) + clear.z * 0.7;
+    }
+    decoCamSig = "";
+  }
+
+  /** 视野变化时调用：刷新装饰显隐。 */
+  function updateDecoVisibility(state) {
     for (let i = 0; i < decoList.length; i++) {
       const g = decoList[i];
       const v = V.visOf(state, g.userData.tx, g.userData.ty);
+      if (v.seen && !g.visible) decoCamSig = "";
       g.visible = v.seen;
-      if (g.visible && g.userData.paper) {
-        const map = state.map;
-        const clear = V.wallClearance(map, g.userData.tx, g.userData.ty);
-        const sz = (MD.sprites && MD.sprites.worldSize(g.userData.name)) || { w: 0.4 };
-        const extra = Math.max(0, (sz.w || 0.4) * 0.25);
-        g.position.x = g.userData.tx * S + (g.userData.ox || 0) + clear.x * 0.7;
-        g.position.z = g.userData.ty * S + (g.userData.oz || 0) + clear.z * 0.7;
-        V.billboard(g.userData.paper, 0.02);
-      }
+    }
+  }
+
+  /** 每帧调用：相机有变化时让可见装饰朝向相机。 */
+  function updateDecos(state) {
+    if (!decoList.length || !V.camera) return;
+    const c = V.camera.position, q = V.camera.quaternion;
+    const sig = c.x.toFixed(3) + "," + c.y.toFixed(3) + "," + c.z.toFixed(3) + "," + q.y.toFixed(4) + "," + q.w.toFixed(4);
+    if (sig === decoCamSig) return;
+    decoCamSig = sig;
+    for (let i = 0; i < decoList.length; i++) {
+      const g = decoList[i];
+      if (g.visible && g.userData.paper) V.billboard(g.userData.paper, 0.02);
     }
   }
 
   Object.assign(V, {
-    clearMap, isWall, rebuildMap, updateDecos,
+    clearMap, isWall, rebuildMap, updateDecos, updateDecoVisibility,
   });
 })(typeof window !== "undefined" ? window : globalThis);

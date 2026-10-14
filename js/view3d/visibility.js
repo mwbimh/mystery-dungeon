@@ -3,7 +3,7 @@
   const MD = global.MD;
   const V = MD.v3d;
   if (typeof THREE === "undefined" || !V) return;
-  const { COL, tint, updateDecos } = V;
+  const { COL, tint } = V;
 
   function visOf(state, x, y) {
     const k = MD.key(x, y);
@@ -64,7 +64,7 @@
         V.stairsLight.intensity = v.vis ? 1.35 : 0;
       }
     }
-    updateDecos(state);
+    V.updateDecoVisibility(state);
   }
 
   Object.assign(V, {
