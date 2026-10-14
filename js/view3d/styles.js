@@ -1,13 +1,14 @@
-/* 迷宫 3D — 低多边形地形风格表（按主题 id）
+/* 迷宫 3D — 手绘 2.5D 地形风格表（按主题 id）
  *
- * floor.style  "ground" 起伏的多边形地面 | "slab" 一块块带倒角的地砖
- * floor.room / floor.corr  房间 / 通道地面的色板（每个三角面随机取一个）
- * wall.style   "rock" 不规则岩壁（顶面高低起伏，侧面分两段外凸）| "block" 规整墙体
- * wall.top / wall.side     顶面 / 侧面色板；wall.base 墙脚色（block）；wall.trim 墙沿发光条（block，可选）
- * wall.h       [最低, 最高] 墙高
- * props.floor  贴墙地面的小物件 [{ kind, p }]，p = 每个贴墙格子出现的概率
- * props.wall   墙顶物件（只放在离地面 maxDist 格以内）
- * mem          记忆中（已探索但不在视野）的颜色乘数
+ * tex       手绘贴图（assets/runtime/terrain/<名>.webp）：floor 房间地面、corr 通道、top 墙顶、side 崖壁/墙面
+ *           缺哪张就用对应的 col 纯色（仍有软阴影和视野变暗）
+ * col       每部分的底色；有贴图时作为乘色（一般接近白色）
+ * wall.style "rock" 圆润厚实的岩壁（顶面微鼓，侧面多段外凸带圆唇）| "block" 规整墙体（基座 + 墙身 + 可选发光条）
+ * wall.h    [最低, 最高] 墙高
+ * texScale  贴图每个世界单位重复几次（0.5 = 两格一张）；topScale / sideScale 单独指定墙顶、崖壁
+ * ao        墙脚接触阴影强度（0~1）
+ * mem       记忆中（已探索但不在视野）的颜色乘数
+ * deco      沿用 themes.js 里的纸片装饰（手绘小物件）
  */
 (function (global) {
   const MD = global.MD;
@@ -16,92 +17,54 @@
 
   const STYLES = {
     cave: {
-      floor: { style: "ground", bump: 0.05, room: [0xd2b98f, 0xc8ad82, 0xdac39c, 0xc2a67c], corr: [0xb9a283, 0xae977a, 0xc1ab8c] },
-      wall: { style: "rock", h: [0.95, 1.6], top: [0x958ead, 0x8b84a3, 0xa09ab8, 0x857e9c], side: [0x756f8f, 0x6c6686, 0x7e7898, 0x645e7e] },
-      props: {
-        floor: [{ kind: "crystal", p: 0.12 }, { kind: "pebbles", p: 0.18 }, { kind: "stalagmite", p: 0.08 }],
-        wall: [{ kind: "boulder", p: 0.22 }, { kind: "crystal", p: 0.05 }],
-        maxDist: 2,
-      },
-      crystal: [0x7fe3ff, 0xc5a0ff, 0xff9fd4],
-      mem: 0x4a4a62,
+      tex: { floor: "cave-floor", corr: "cave-floor", top: "cave-top", side: "cave-side" },
+      col: { floor: 0xffffff, corr: 0xe8e2d8, top: 0xffffff, side: 0xf2eef8 },
+      floor: { bump: 0.05 },
+      wall: { style: "rock", h: [1.0, 1.55] },
+      texScale: 0.42, topScale: 0.3, sideScale: 0.4, ao: 0.42, mem: 0x4a4a62,
     },
     forest: {
-      floor: { style: "ground", bump: 0.06, room: [0x9fd068, 0xabd975, 0x92c45c, 0xb4de7e], corr: [0xcaa876, 0xbd9b6a, 0xd4b483] },
-      wall: { style: "rock", h: [0.7, 1.05], top: [0x62ad48, 0x6fba53, 0x58a040, 0x7bc25c], side: [0x8f6545, 0x815a3c, 0x9a6f4e, 0x76523a] },
-      props: {
-        floor: [{ kind: "grass", p: 0.35 }, { kind: "flowers", p: 0.14 }, { kind: "mushroom", p: 0.06 }],
-        wall: [{ kind: "tree", p: 0.55 }, { kind: "bush", p: 0.25 }],
-        maxDist: 2,
-      },
-      leaves: [0x3f9a3c, 0x4caa45, 0x338a37, 0x5bb54c],
-      trunk: [0x6e4b2f, 0x7a5636],
-      flowers: [0xffd85a, 0xff8f86, 0xffffff, 0xc9a6ff],
-      mem: 0x3e4c44,
+      tex: { floor: "forest-floor", corr: "forest-path", top: "forest-top", side: "forest-side" },
+      col: { floor: 0xffffff, corr: 0xffffff, top: 0xffffff, side: 0xffffff },
+      floor: { bump: 0.06 },
+      wall: { style: "rock", h: [0.85, 1.25] },
+      texScale: 0.42, topScale: 0.2, sideScale: 0.4, ao: 0.45, mem: 0x3e4c44,
     },
     wetcave: {
-      floor: { style: "ground", bump: 0.05, room: [0x88adc2, 0x7fa3b8, 0x93b7cb], corr: [0x7393a6, 0x6b8b9e] },
-      wall: { style: "rock", h: [1.0, 1.7], top: [0x5a7d94, 0x52748b, 0x6386a0], side: [0x45627a, 0x3e5a71, 0x4c6a83] },
-      props: {
-        floor: [{ kind: "stalagmite", p: 0.14 }, { kind: "crystal", p: 0.08 }, { kind: "pebbles", p: 0.12 }],
-        wall: [{ kind: "boulder", p: 0.2 }],
-        maxDist: 2,
-      },
-      crystal: [0x8fe8ff, 0xa8c4ff],
-      mem: 0x3a4a5a,
+      col: { floor: 0x88adc2, corr: 0x7a9db2, top: 0x5f8299, side: 0x4a687f },
+      floor: { bump: 0.05 },
+      wall: { style: "rock", h: [1.05, 1.65] },
+      texScale: 0.42, ao: 0.4, mem: 0x3a4a5a,
     },
     ruins: {
-      floor: { style: "slab", room: [0xdccda7, 0xd2c29b, 0xe4d6b2, 0xcdbd95], corr: [0xc1b08c, 0xb7a682], grout: 0x9c8d6e },
-      wall: { style: "block", h: [1.1, 1.3], top: [0xc7b892, 0xbcad88], side: [0xae9e7e, 0xa39374, 0xb8a888], base: 0x8c7d62 },
-      props: {
-        floor: [{ kind: "rubble", p: 0.18 }, { kind: "pillar", p: 0.06 }, { kind: "grass", p: 0.12 }],
-        wall: [{ kind: "rubble", p: 0.15 }],
-        maxDist: 1,
-      },
-      mem: 0x4c463c,
+      col: { floor: 0xdccda7, corr: 0xc8b893, top: 0xc7b892, side: 0xae9e7e, base: 0x8c7d62 },
+      floor: { bump: 0 },
+      wall: { style: "block", h: [1.15, 1.15] },
+      texScale: 0.5, ao: 0.35, mem: 0x4c463c,
     },
     wooden: {
-      floor: { style: "slab", room: [0xc98f56, 0xbd844c, 0xd49a61, 0xb37a44], corr: [0xa9743f, 0x9e6b39], grout: 0x6e4a2a },
-      wall: { style: "block", h: [1.1, 1.2], top: [0x7d5535, 0x734d30], side: [0x9f6e44, 0x94653e, 0xa8764a], base: 0x5e3f27 },
-      props: {
-        floor: [{ kind: "crate", p: 0.12 }, { kind: "barrel", p: 0.1 }],
-        wall: [],
-        maxDist: 1,
-      },
-      mem: 0x4a3c30,
+      col: { floor: 0xc98f56, corr: 0xae7843, top: 0x7d5535, side: 0x9f6e44, base: 0x5e3f27 },
+      floor: { bump: 0 },
+      wall: { style: "block", h: [1.15, 1.15] },
+      texScale: 0.5, ao: 0.35, mem: 0x4a3c30,
     },
     modern: {
-      floor: { style: "slab", room: [0xe8e8e4, 0xdededa, 0xf0f0ec], corr: [0xcbcdd1, 0xc2c4c8], grout: 0xa4a8ae },
-      wall: { style: "block", h: [1.15, 1.25], top: [0x9ca5af, 0x939ca6], side: [0xd2d7dd, 0xc8ced5, 0xdadfe4], base: 0x7f8792 },
-      props: {
-        floor: [{ kind: "planter", p: 0.08 }, { kind: "crate", p: 0.08 }],
-        wall: [],
-        maxDist: 1,
-      },
-      leaves: [0x4caa45, 0x3f9a3c],
-      mem: 0x484c54,
+      col: { floor: 0xe8e8e4, corr: 0xcbcdd1, top: 0x9ca5af, side: 0xd2d7dd, base: 0x7f8792 },
+      floor: { bump: 0 },
+      wall: { style: "block", h: [1.2, 1.2] },
+      texScale: 0.5, ao: 0.3, mem: 0x484c54,
     },
     cyber: {
-      floor: { style: "slab", room: [0x3d3854, 0x36314c, 0x433d5c], corr: [0x2e2b42, 0x29263b], grout: 0x1c1a28 },
-      wall: { style: "block", h: [1.2, 1.5], top: [0x24222f, 0x2a2837], side: [0x403a5a, 0x383352, 0x48416a], base: 0x1e1c2a, trim: [0xff4fd8, 0x40e0ff] },
-      props: {
-        floor: [{ kind: "neon", p: 0.08 }, { kind: "crate", p: 0.06 }],
-        wall: [],
-        maxDist: 1,
-      },
-      neon: [0xff4fd8, 0x40e0ff, 0xffe14f],
-      mem: 0x3a3650,
+      col: { floor: 0x3d3854, corr: 0x2e2b42, top: 0x24222f, side: 0x403a5a, base: 0x1e1c2a },
+      floor: { bump: 0 },
+      wall: { style: "block", h: [1.3, 1.3], trim: [0xff4fd8, 0x40e0ff] },
+      texScale: 0.5, ao: 0.3, mem: 0x3a3650,
     },
     future: {
-      floor: { style: "slab", room: [0xeaf2f9, 0xe0eaf3, 0xf3f8fc], corr: [0xcfdce8, 0xc6d4e2], grout: 0xa9bccd },
-      wall: { style: "block", h: [1.2, 1.3], top: [0xf5f9fc, 0xeef4f9], side: [0xcad8e6, 0xc1d1e1, 0xd3e0ec], base: 0x95a9bd, trim: [0x5ad1ff] },
-      props: {
-        floor: [{ kind: "neon", p: 0.07 }],
-        wall: [],
-        maxDist: 1,
-      },
-      neon: [0x5ad1ff, 0x9fe8ff],
-      mem: 0x4a5664,
+      col: { floor: 0xeaf2f9, corr: 0xcfdce8, top: 0xf5f9fc, side: 0xcad8e6, base: 0x95a9bd },
+      floor: { bump: 0 },
+      wall: { style: "block", h: [1.25, 1.25], trim: [0x5ad1ff] },
+      texScale: 0.5, ao: 0.3, mem: 0x4a5664,
     },
   };
 
@@ -109,5 +72,19 @@
     return STYLES[(theme && theme.id) || "cave"] || STYLES.cave;
   }
 
-  Object.assign(V, { TERRAIN_STYLES: STYLES, styleFor });
+  // 贴图缓存（按文件名），换层不重复加载
+  const texCache = {};
+  function terrainTex(name, onLoad) {
+    if (!name) return null;
+    if (texCache[name]) return texCache[name];
+    const v = "1"; // 换贴图时改这里
+    const tex = new THREE.TextureLoader().load("assets/runtime/terrain/" + name + ".webp" + (v ? "?v=" + v : ""), onLoad);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 4;
+    texCache[name] = tex;
+    return tex;
+  }
+
+  Object.assign(V, { TERRAIN_STYLES: STYLES, styleFor, terrainTex });
 })(typeof window !== "undefined" ? window : globalThis);

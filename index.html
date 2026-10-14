@@ -187,7 +187,7 @@
     if (!flat) {
       files.unshift("vendor/three.min.js");
       files.push("js/sprites.js?v=" + v);
-      ["core", "fx", "theme", "paper", "styles", "props", "terrain", "visibility", "actors", "camera", "main"].forEach(function (m) {
+      ["core", "fx", "theme", "paper", "styles", "terrain", "visibility", "actors", "camera", "main"].forEach(function (m) {
         files.push("js/view3d/" + m + ".js?v=" + v);
       });
     }
