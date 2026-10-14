@@ -113,6 +113,7 @@
 
     refreshFOV();
     log("到达了 " + floorNum + " 层。", "good");
+    if (MD.story) MD.story.trigger("floor", { floor: floorNum });
   }
 
   function enterDungeon() {
@@ -153,6 +154,9 @@
     showOverlay("townOverlay");
     MD.saveWarehouse(state.warehouse);
     updateUI();
+    const after = state.endKind;
+    state.endKind = null;
+    if (MD.story) MD.story.trigger("town", { after: after });
   }
 
   function tryPickup(auto) {

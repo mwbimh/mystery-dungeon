@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>迷宫</title>
-  <link rel="stylesheet" href="css/style.css?v=68" />
+  <link rel="stylesheet" href="css/style.css?v=69" />
 </head>
 <body>
   <div class="app">
@@ -177,7 +177,7 @@
   <script>
   (function () {
     var flat = /(?:\?|&)flat=1(?:&|$)/.test(location.search);
-    var v = "68"; // 脚本缓存版本；改动 JS/CSS 时同步改 css 链接里的 v
+    var v = "69"; // 脚本缓存版本；改动 JS/CSS 时同步改 css 链接里的 v
     var files = ["js/themes.js?v=" + v, "js/map.js?v=" + v, "js/fov.js?v=" + v, "js/items.js?v=" + v, "js/actors.js?v=" + v];
     if (!flat) {
       files.unshift("vendor/three.min.js");
@@ -186,6 +186,7 @@
         files.push("js/view3d/" + m + ".js?v=" + v);
       });
     }
+    files.push("js/story/scenes.js?v=" + v, "js/story/vn.js?v=" + v);
     files.push("js/ui.js?v=" + v);
     ["core", "floor", "turn", "itemuse", "inventory", "skillbar", "input", "main"].forEach(function (m) {
       files.push("js/game/" + m + ".js?v=" + v);
