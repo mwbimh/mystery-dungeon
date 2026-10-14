@@ -92,17 +92,59 @@
     return slots.left.who ? "right" : "left";
   }
 
-  function showPortrait(who, pos) {
+  /** "kimi:smile" → { who: "kimi", face: "smile" } */
+  function parseWho(w) {
+    if (!w) return { who: null, face: null };
+    const k = String(w).indexOf(":");
+    return k < 0 ? { who: w, face: null } : { who: w.slice(0, k), face: w.slice(k + 1) || null };
+  }
+
+  /** 差分立绘路径：cast.faces[face] → cast.faceDir 约定（<faceDir><face>.webp）→ 默认 img */
+  function faceSrc(who, face) {
+    const c = castOf(who);
+    if (!c) return null;
+    if (!face || face === "default") return c.img;
+    if (c.faces && c.faces[face]) return c.faces[face];
+    if (c.faceDir) return c.faceDir + face + ".webp";
+    return c.img;
+  }
+
+  const preloaded = {};
+  function preload(src) {
+    if (!src || preloaded[src]) return;
+    const im = new Image();
+    im.src = src;
+    preloaded[src] = im;
+  }
+
+  function setSrc(el, who, face) {
+    const src = faceSrc(who, face);
+    if (el.getAttribute("src") === src) return;
+    const fallback = castOf(who).img;
+    el.onerror = src !== fallback ? function () { el.onerror = null; el.src = fallback; } : null;
+    el.src = src;
+  }
+
+  function showPortrait(who, pos, face) {
     const c = castOf(who);
     if (!c || !c.img) return null;
     const side = slotFor(who, pos);
     const s = slots[side];
+    const other = slots[side === "left" ? "right" : "left"];
+    if (other.who === who) { // 换站位：从另一侧撤下
+      other.who = null;
+      other.el.classList.remove("shown", "talk", "dim");
+    }
     if (s.who !== who) {
       s.who = who;
-      s.el.src = c.img;
+      s.face = face || c.face || null;
+      setSrc(s.el, who, s.face);
       s.el.classList.remove("in");
       void s.el.offsetWidth; // 重新触发入场动画
       s.el.classList.add("in");
+    } else if (face && face !== s.face) {
+      s.face = face; // 同一角色换表情：直接换图，不播入场动画
+      setSrc(s.el, who, face);
     }
     s.el.classList.add("shown");
     return side;
@@ -118,6 +160,8 @@
   function clearPortraits() {
     ["left", "right"].forEach(function (k) {
       slots[k].who = null;
+      slots[k].face = null;
+      slots[k].el.onerror = null;
       slots[k].el.removeAttribute("src");
       slots[k].el.className = "vn-portrait vn-" + k;
     });
@@ -133,7 +177,13 @@
     scene.lines.forEach(function (l, i) { if (l && l.label) labels[l.label] = i; });
     cur = { scene: scene, i: -1, onDone: onDone, typing: false, timer: 0, full: "", labels: labels };
     clearPortraits();
-    (scene.cast || []).forEach(function (who) { showPortrait(who); });
+    scene.lines.forEach(function (l) {
+      let w = null, f = null;
+      if (Array.isArray(l)) { const p = parseWho(l[0]); w = p.who; f = p.face || (l[2] && l[2].face); }
+      else if (l && l.show) { const p = parseWho(l.show); w = p.who; f = p.face || l.face; }
+      if (w && castOf(w)) preload(faceSrc(w, f));
+    });
+    (scene.cast || []).forEach(function (w) { const p = parseWho(w); showPortrait(p.who, null, p.face); });
     focusSpeaker(null);
     root.classList.remove("hidden");
     document.body.classList.add("vn-open");
@@ -157,21 +207,31 @@
         cur.i = cur.labels[l.goto] != null ? cur.labels[l.goto] : lines.length;
         continue;
       }
+      if (l.show) {
+        const p = parseWho(l.show);
+        showPortrait(p.who, l.pos, p.face || l.face);
+        continue;
+      }
       if (l.leave) {
         ["left", "right"].forEach(function (k) {
-          if (slots[k].who === l.leave) { slots[k].who = null; slots[k].el.classList.remove("shown", "talk", "dim"); }
+          if (slots[k].who === parseWho(l.leave).who) { slots[k].who = null; slots[k].el.classList.remove("shown", "talk", "dim"); }
         });
         continue;
       }
       if (l.choice) { showChoice(l.choice); return; }
-      if (Array.isArray(l)) { say(l[0], l[1], l[2]); return; }
+      if (Array.isArray(l)) {
+        const p = parseWho(l[0]);
+        const opt = typeof l[2] === "string" ? { pos: l[2] } : (l[2] || {});
+        say(p.who, l[1], opt.pos, p.face || opt.face);
+        return;
+      }
     }
   }
 
-  function say(who, text, pos) {
+  function say(who, text, pos, face) {
     const c = castOf(who);
     let side = null;
-    if (c) side = showPortrait(who, pos);
+    if (c) side = showPortrait(who, pos, face);
     focusSpeaker(side);
     nameEl.textContent = c ? c.name : (who || "");
     nameEl.classList.toggle("empty", !nameEl.textContent);
@@ -259,7 +319,32 @@
     return play(list[0], onDone);
   }
 
+  /** 检查剧情数据：未知角色、缺失 label、重复 id。返回问题列表（空 = 没问题）。 */
+  function validate() {
+    const out = [];
+    const ids = {};
+    data().scenes.forEach(function (sc) {
+      if (ids[sc.id]) out.push("重复 id：" + sc.id);
+      ids[sc.id] = true;
+      const labels = {};
+      sc.lines.forEach(function (l) { if (l && l.label) labels[l.label] = true; });
+      function who(w, where) {
+        const p = parseWho(w);
+        if (p.who && !castOf(p.who)) out.push(sc.id + "：未知角色 " + p.who + "（" + where + "）");
+      }
+      (sc.cast || []).forEach(function (w) { who(w, "cast"); });
+      sc.lines.forEach(function (l, i) {
+        if (Array.isArray(l)) who(l[0], "第 " + (i + 1) + " 行");
+        else if (l && l.show) who(l.show, "show");
+        else if (l && l.goto && l.goto !== "end" && !labels[l.goto]) out.push(sc.id + "：goto 找不到 label " + l.goto);
+        else if (l && l.choice) l.choice.forEach(function (o) { if (o[1] && !labels[o[1]]) out.push(sc.id + "：选项找不到 label " + o[1]); });
+      });
+    });
+    return out;
+  }
+
   MD.story = {
+    validate: validate,
     trigger: trigger,
     play: play,
     active: function () { return !!cur; },

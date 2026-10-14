@@ -1,15 +1,22 @@
 /* 剧情数据。改台词只需要改这个文件。
  *
- * cast：角色 id → { name 显示名, img 立绘, side 默认站位 left/right }
+ * cast：角色 id → { name 显示名, img 默认立绘, side 默认站位 left/right,
+ *                   faces 差分表 { smile: "路径", ... },
+ *                   faceDir 差分约定目录（faces 里没写的表情找 <faceDir><表情>.webp），
+ *                   face 默认表情 }
+ *   差分找不到时自动退回默认立绘。
  * scenes：每段剧情
  *   id      唯一 id（记录是否看过）
  *   on      触发条件 { event: "town"|"npc"|"floor", npc, floor, after: "death"|"clear", once, requires }
  *   cast    开场就站在台上的角色
  *   lines   台词：
  *             ["kimi", "台词"]              角色说话（第三项可写 "left"/"right" 指定站位）
+ *             ["kimi:smile", "台词"]        带表情差分说话（也可写第三项 { face: "smile", pos: "left" }）
+ *             { show: "kimi:angry", pos }   只换表情/上场，不说话
  *             [null, "旁白"]
  *             { choice: [["选项文字", "跳到的 label"], ...] }
  *             { label: "a" }  { goto: "b" }  { goto: "end" }  { leave: "kimi" }
+ * 检查数据：浏览器控制台运行 MD.story.validate()
  */
 (function (global) {
   const MD = global.MD || (global.MD = {});
@@ -17,12 +24,12 @@
 
   MD.storyData = {
     cast: {
-      deepseek: { name: "DeepSeek", img: P + "deepseek.webp", side: "left" },
-      kimi: { name: "Kimi", img: P + "kimi.webp", side: "right" },
-      claude: { name: "Claude", img: P + "claude.webp", side: "right" },
-      gpt: { name: "GPT", img: P + "gpt.webp", side: "right" },
-      glm: { name: "GLM", img: P + "glm.webp", side: "right" },
-      harness: { name: "Harness", img: P + "harness.webp", side: "right" },
+      deepseek: { faceDir: P + "deepseek/", name: "DeepSeek", img: P + "deepseek.webp", side: "left" },
+      kimi: { faceDir: P + "kimi/", name: "Kimi", img: P + "kimi.webp", side: "right" },
+      claude: { faceDir: P + "claude/", name: "Claude", img: P + "claude.webp", side: "right" },
+      gpt: { faceDir: P + "gpt/", name: "GPT", img: P + "gpt.webp", side: "right" },
+      glm: { faceDir: P + "glm/", name: "GLM", img: P + "glm.webp", side: "right" },
+      harness: { faceDir: P + "harness/", name: "Harness", img: P + "harness.webp", side: "right" },
     },
 
     scenes: [
