@@ -42,11 +42,15 @@
   // Boot
   initSkillBar();
   renderSkills();
-  log("欢迎。", "good");
-  showOverlay("townOverlay");
+  G.initSaveUI();
+  const resumed = G.loadGame();
+  if (!resumed) {
+    log("欢迎。", "good");
+    showOverlay("townOverlay");
+  }
   updateUI();
   canvas.focus();
-  if (MD.story) MD.story.trigger("town", {});
+  if (!resumed && MD.story) MD.story.trigger("town", {});
   requestAnimationFrame(frame);
 
   // Expose for debug

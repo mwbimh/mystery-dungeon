@@ -1319,3 +1319,5 @@ button.hud-seal {
   .vn-right { right: -6vw; }
   .vn-box { padding: 32px 34px 26px; }
 }
+
+.save-msg { min-height: 1.2em; margin: 8px 0 0; font-size: 0.9rem; color: #8a5a30; }
