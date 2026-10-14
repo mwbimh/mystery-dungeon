@@ -50,10 +50,6 @@
       V.playerLight.intensity = inRoom ? 0.45 : 0.35;
       V.playerLight.distance = inRoom ? 7 : 4.2;
     }
-    if (V.hemi) {
-      V.hemi.color.set(0xfff0d8);
-      V.hemi.groundColor.set(0xa8c8b8);
-    }
   }
 
   function attachOrbit(el) {
