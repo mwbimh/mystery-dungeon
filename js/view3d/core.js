@@ -20,7 +20,6 @@
   const PITCH_FIXED = 52 * DEG; // locked overhead; orbit yaw only
   const DIST_MIN = 4;
   const DIST_MAX = 16;
-  const UV_SCALE = 0.48;
   const YAW_STEP = 15 * DEG;
 
   const COL = {
@@ -43,15 +42,6 @@
   V.hitPoint = null;
   V.floorPlane = null;
 
-  V.floorMesh = null;
-  V.wallMesh = null;
-  V.floorMeshB = null;
-  V.wallMeshB = null;
-  V.edgeMesh = null;
-  V.floorMeta = [];
-  V.wallMeta = [];
-  V.floorMetaB = [];
-  V.wallMetaB = [];
   V.lastMap = null;
   V.lastVisSig = "";
 
@@ -63,10 +53,6 @@
   V.stairsLight = null;
   V.playerLight = null;
   V.hemi = null;
-  V.dirtTex = null;
-  V.rockTex = null;
-  V.dirtTexB = null;
-  V.rockTexB = null;
   V.currentTheme = null;
   V.pendingTheme = null;
 
@@ -140,7 +126,7 @@
   }
 
   Object.assign(V, {
-    S, HOP_MS, FOG, CAM_FOV, PITCH_FIXED, DIST_MIN, DIST_MAX, UV_SCALE,
+    S, HOP_MS, FOG, CAM_FOV, PITCH_FIXED, DIST_MIN, DIST_MAX,
     YAW_STEP, COL, decoList, actorPool, itemPool, actorVisual, itemVisual, paperMats, orbit,
     hash01, noise2, fbm, tint, clamp, canWebGL,
   });

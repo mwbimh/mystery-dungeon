@@ -4,7 +4,7 @@
   const V = MD.v3d;
   if (typeof THREE === "undefined" || !V) return;
   const { CAM_FOV, FOG, S, applyOrbit, attachOrbit, canWebGL, clearMap, hideAllSprites, hideFx,
-    makeSeamlessTex, onOrbitKey, orbit, paperMat, rebuildMap, setTheme, tryLoadRuntimeCaveTex,
+    onOrbitKey, orbit, paperMat, rebuildMap, setTheme, 
     updateActors, updateCamera, updateDecos, updateFx, updateItems, updateVisibility } = V;
 
   function init(canvas) {
@@ -43,24 +43,6 @@
     V.ndc = new THREE.Vector2();
     V.hitPoint = new THREE.Vector3();
     V.floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
-    V.dirtTex = makeSeamlessTex(256, 3, [232, 210, 160]);
-    V.rockTex = makeSeamlessTex(256, 19, [180, 192, 208]);
-    // Prefer runtime cave textures (anime floor/wall)
-    tryLoadRuntimeCaveTex("floor", function (tex) {
-      V.dirtTex = tex;
-      if (V.floorMesh && V.floorMesh.material) {
-        V.floorMesh.material.map = tex;
-        V.floorMesh.material.needsUpdate = true;
-      }
-    });
-    tryLoadRuntimeCaveTex("wall", function (tex) {
-      V.rockTex = tex;
-      if (V.wallMesh && V.wallMesh.material) {
-        V.wallMesh.material.map = tex;
-        V.wallMesh.material.needsUpdate = true;
-      }
-    });
 
     V.hemi = new THREE.HemisphereLight(0xfff0d8, 0xa8c8b8, 0.78);
     V.scene.add(V.hemi);
